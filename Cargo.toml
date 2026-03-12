@@ -14,11 +14,12 @@ leptos_router = { version = "0.8.12",  default-features = false, features=["ssr"
 console_error_panic_hook = { version = "0.1", optional = true }
 wasm-bindgen = { version = "0.2.114", optional = true }
 serde = {version = "1.0.228", features=["derive"]}
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "macros"], optional = true }
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "macros", "chrono"], optional = true }
 axum = { version = "0.8.8", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 leptos_axum = { version = "0.8.8", optional = true }
 tower-http = { version = "0.6.8", features = ["cors"], optional = true }
+chrono = {version="0.4.44", features = ["serde"]}
 
 [features]
 # hydrate = [
@@ -62,7 +63,13 @@ site-root = "target/site"
 site-pkg-dir = "assets"
 
 # [Optional] The source CSS file. If it ends with .sass or .scss then it will be compiled by dart-sass into CSS. The CSS is optimized by Lightning CSS before being written to <site-root>/<site-pkg>/app.css
-style-file = "style/main.scss"
+# style-file = "style/main.scss"
+
+# The tailwind input file.
+#
+# Optional, Activates the tailwind build
+tailwind-input-file = "style/tailwind.css"
+
 # Assets source dir. All files found here will be copied and synchronized to site-root.
 # The assets-dir cannot have a sub directory with the same name/path as site-pkg-dir.
 #
@@ -105,3 +112,4 @@ lib-profile-release = "wasm-release"
 
 # Optional: Defaults to false. Can also be set with the LEPTOS_JS_MINIFY=false env var (must be set at runtime too)
 js-minify = false
+
