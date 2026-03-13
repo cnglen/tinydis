@@ -1,7 +1,8 @@
 use leptos::{prelude::*, server};
 use serde::{Deserialize, Serialize};
-use chrono::{NaiveDateTime};
+use chrono::{NaiveDateTime, FixedOffset};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
@@ -15,19 +16,18 @@ pub struct Comment {
 
 #[server]
 pub async fn get_comments(page_id: String) -> Result<Vec<Comment>, ServerFnError> {
-    println!("  get_comments: page_id={}", page_id);
     use sqlx::SqlitePool;
     let pool = expect_context::<SqlitePool>();
     let comments = sqlx::query_as::<_, Comment>(
         "SELECT id, parent_id, user_name, content, created_at
          FROM comments
          WHERE page_id = ?
-         ORDER BY created_at ASC")
-        .bind(page_id)
-        .fetch_all(&pool)
-        .await?;
-
-    println!("  comments count={:?}", comments.len());
+         -- WHERE page_id = ? AND status = 'approved'
+         ORDER BY created_at ASC"
+    )
+    .bind(page_id)
+    .fetch_all(&pool)
+    .await?;
     Ok(comments)
 }
 
@@ -41,56 +41,156 @@ pub async fn add_comment(
 ) -> Result<(), ServerFnError> {
     use sqlx::SqlitePool;
     let pool = expect_context::<SqlitePool>();
-
-    sqlx::query("INSERT INTO comments (page_id, user_name, user_email, content, parent_id, status) VALUES (?, ?, ?, ?, ?, 'pending')")
-        .bind(page_id)
-        .bind(user_name)
-        .bind(user_email)
-        .bind(content)
-        .bind(parent_id)
-        .execute(&pool)
-        .await?;
+    sqlx::query(
+        "INSERT INTO comments (page_id, user_name, user_email, content, parent_id, status) 
+         VALUES (?, ?, ?, ?, ?, 'pending')"
+    )
+    .bind(page_id)
+    .bind(user_name)
+    .bind(user_email)
+    .bind(content)
+    .bind(parent_id)
+    .execute(&pool)
+    .await?;
     Ok(())
+}
+
+#[component]
+fn InlineReplyForm(
+    page_id: Arc<String>,
+    parent_id: i64,
+    add_comment: ServerAction<AddComment>,
+    set_expanded: WriteSignal<Option<i64>>,
+) -> impl IntoView {
+    view! {
+      <div class="mt-3 mb-2 border border-blue-200 rounded-lg p-3 bg-blue-50">
+        <ActionForm action=add_comment>
+          <input type="hidden" name="page_id" value=page_id.to_string() />
+          <input type="hidden" name="parent_id" value=parent_id.to_string() />
+
+          <div class="flex flex-col space-y-2">
+            <div class="flex space-x-2">
+              <input
+                class="flex-1 p-2 text-xs border border-gray-300 rounded"
+                type="text"
+                name="user_name"
+                placeholder="昵称"
+                required
+              />
+              <input
+                class="flex-1 p-2 text-xs border border-gray-300 rounded"
+                type="email"
+                name="user_email"
+                placeholder="邮箱"
+                required
+              />
+            </div>
+            <textarea
+              class="w-full p-2 text-xs border border-gray-300 rounded"
+              name="content"
+              placeholder="写下你的回复..."
+              rows="2"
+              required
+            ></textarea>
+            <div class="flex justify-end space-x-2">
+              <button
+                type="button"
+                class="px-3 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer"
+                on:click=move |_| set_expanded.set(None)
+              >
+                "取消"
+              </button>
+              <button
+                type="submit"
+                class="px-3 py-1 text-xs text-white bg-blue-500 rounded hover:bg-blue-600 disabled:bg-blue-300 cursor-pointer"
+                disabled=move || add_comment.pending().get()
+              >
+                {move || { if add_comment.pending().get() { "发送中..." } else { "提交" } }}
+              </button>
+            </div>
+          </div>
+        </ActionForm>
+      </div>
+    }
 }
 
 fn comment_thread(
     comment: Comment,
     all_comments: HashMap<Option<i64>, Vec<Comment>>,
-    reply_to_signal: (ReadSignal<Option<(i64, String)>>, WriteSignal<Option<(i64, String)>>),
+    expanded_reply: ReadSignal<Option<i64>>,
+    set_expanded_reply: WriteSignal<Option<i64>>,
+    add_comment: ServerAction<AddComment>,
+    page_id: Arc<String>,
 ) -> AnyView {
-    let (_, set_reply_to) = reply_to_signal; // 只需要 setter，但保留元组以便传递
     let children = all_comments.get(&Some(comment.id)).cloned().unwrap_or_default();
 
-    // 构建子评论视图列表（递归调用自身，返回 Vec<View>）
     let children_views: Vec<AnyView> = children
         .into_iter()
         .map(|child| {
-            comment_thread(child, all_comments.clone(), reply_to_signal)
+            comment_thread(
+                child,
+                all_comments.clone(),
+                expanded_reply,
+                set_expanded_reply,
+                add_comment.clone(),
+                Arc::clone(&page_id),
+            )
         })
         .collect();
+
+    let comment_id = comment.id;
+    let comment_user_name = comment.user_name.clone();
+    let comment_content = comment.content.clone();
+    let timezone_shanghai = FixedOffset::east_opt(8 * 3600).unwrap(); 
+    let comment_date = comment.created_at.and_utc().with_timezone(&timezone_shanghai).to_rfc3339();
+
+    let is_expanded = move || expanded_reply.get() == Some(comment_id);
+    let on_reply_click = move |_| {
+        if expanded_reply.get() == Some(comment_id) {
+            set_expanded_reply.set(None);
+        } else {
+            set_expanded_reply.set(Some(comment_id));
+        }
+    };
 
     view! {
       <div class="ml-4 mt-2 border-l-2 border-gray-200 pl-4">
         <div class="flex items-start">
           <div class="flex-1">
-            <strong class="mr-2">{comment.user_name.clone()}</strong>
-            <span class="text-gray-400 text-sm">
-              {comment.created_at.and_utc().to_string()}
-            </span>
+            <strong class="mr-2">{comment_user_name.clone()}</strong>
+            <span class="text-gray-400 text-sm">{comment_date.clone()}</span>
           </div>
           <button
             type="button"
             class="text-blue-500 hover:text-blue-700 cursor-pointer"
-            on:click=move |_| set_reply_to.set(Some((comment.id, comment.user_name.clone())))
+            title="回复"
+            on:click=on_reply_click
           >
-            "💬 回复"
+            "💬"
           </button>
         </div>
-        <p class="mt-1 text-gray-700">{comment.content.clone()}</p>
+        <p class="mt-1 text-gray-700">{comment_content.clone()}</p>
+
+        {move || {
+          if is_expanded() {
+            view! {
+              <InlineReplyForm
+                page_id=page_id.clone()
+                parent_id=comment_id
+                add_comment=add_comment.clone()
+                set_expanded=set_expanded_reply
+              />
+            }
+              .into_any()
+          } else {
+            ().into_any()
+          }
+        }}
+
         {children_views}
       </div>
     }
-    .into_any() // 将 HtmlElement<Div> 转换为 View
+    .into_any()
 }
 
 #[component]
@@ -101,50 +201,29 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
     } else {
         page_id
     };
+    let page_id_arc = Arc::new(page_id);
 
-    // (parent_id, parent_user_name)
-    let (reply_to, set_reply_to) = signal(None::<(i64, String)>);
-
+    let (expanded_reply, set_expanded_reply) = signal(None::<i64>);
     let add_comment = ServerAction::<AddComment>::new();
-    let page_id_cloned = page_id.clone();
+    let page_id_cloned = Arc::clone(&page_id_arc);
     let comments_resource = Resource::new(
         move || (add_comment.version().get(), page_id_cloned.clone()),
-        move |(_, pid)| get_comments(pid)
+        move |(_, pid_arc)| get_comments((*pid_arc).clone())
     );
-    
-    
-    let result = view! {
+
+    Effect::new(move |_| {
+        let _ = add_comment.version().get();
+        set_expanded_reply.set(None);
+    });
+
+    let page_id_for_top_form = Arc::clone(&page_id_arc);
+    let page_id_for_children = Arc::clone(&page_id_arc);
+
+    view! {
       <div class="comment-container mt-4">
-        // action ~ server_function; name attribute ~ arguments of server function
         <ActionForm action=add_comment>
-          <input type="hidden" name="page_id" value=page_id />
-          <input
-            type="hidden"
-            name="parent_id"
-            value=move || { reply_to.get().map(|(id, _)| id.to_string()).unwrap_or_default() }
-          />
-
+          <input type="hidden" name="page_id" value=page_id_for_top_form.to_string() />
           <div class="relative shrink w-full m-2 rounded-xl border border-solid border-gray-300 mb-5">
-
-            // 显示当前回复目标
-            {move || {
-              reply_to
-                .get()
-                .map(|(_, name)| {
-                  view! {
-                    <div class="flex items-center justify-between bg-blue-50 px-3 py-2 text-sm text-blue-700 rounded-t-xl border-b border-blue-200">
-                      <span>"回复 @" {name}</span>
-                      <button
-                        type="button"
-                        class="text-blue-500 hover:text-blue-700 cursor-pointer"
-                        on:click=move |_| set_reply_to.set(None)
-                      >
-                        "取消"
-                      </button>
-                    </div>
-                  }
-                })
-            }}
             <div class="flex rounded-t-xl overflow-hidden px-1 border-b-2 border-dashed border-b-gray-300">
               <div class="flex flex-1">
                 <label class="min-w-10 text-[#444] text-xs text-center py-3 px-2">昵称</label>
@@ -165,13 +244,15 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
                 />
               </div>
             </div>
+
             <textarea
-              // class="max-w-full text-[#444444] border-none outline-none transition-all duration-300"
               class="relative resize-y box-border w-[calc(100%-1em)] min-h-32 text-xs my-3 mx-2 rounded-xs bg-transparent"
               name="content"
-              placeholder="欢迎评论"
+              placeholder="欢迎评论 (评论列表中只展示昵称，邮箱仅用于后台审核、通知)"
               required
-            ></textarea> <div class="relative flex flex-wrap mx-2 my-3">
+            ></textarea>
+
+            <div class="relative flex flex-wrap mx-2 my-3">
               <div class="flex items-center justify-end flex-3 flex-shrink">
                 <button
                   type="submit"
@@ -182,48 +263,11 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
               </div>
             </div>
           </div>
-
         </ActionForm>
 
-        <h3>"评论"</h3>
-
-        // <Suspense fallback=|| {
-        // view! { <p>"加载中..."</p> }
-        // }>
-        // {move || {
-        // comments
-        // .get()
-        // .map(|res| match res {
-        // Ok(items) if !items.is_empty() => {
-        // items
-        // .into_iter()
-        // .map(|c| {
-        // let s = c.created_at.and_utc().date_naive().to_string();
-
-        // view! {
-        // <div class="m-3">
-        // <strong class="mr-4">{c.user_name}</strong>
-        // <span class="text-gray-400">{s}</span>
-        // <button type="button" class="float-right cursor-pointer" title="回复">
-        // "💬"
-        // </button>
-        // <p>{c.content}</p>
-        // </div>
-        // }
-        // })
-        // .collect_view()
-        // .into_any()
-        // }
-        // _ => {
-        // view! {
-        // <p class="text-gray-400 text-center">"暂无评论，快来抢沙发！"</p>
-        // }
-        // .into_any()
-        // }
-        // })
-        // }}
-        // </Suspense>
-
+        <div>
+          <div class="text-xl">"评论"</div>
+        </div>
         <Suspense fallback=|| {
           view! { <p>"加载中..."</p> }
         }>
@@ -242,11 +286,18 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
                   let root_comments = map.remove(&None).unwrap_or_default();
                   let root_views: Vec<AnyView> = root_comments
                     .into_iter()
-                    .map(|root| comment_thread(root, map.clone(), (reply_to, set_reply_to)))
+                    .map(|root| {
+                      comment_thread(
+                        root,
+                        map.clone(),
+                        expanded_reply,
+                        set_expanded_reply,
+                        add_comment.clone(),
+                        Arc::clone(&page_id_for_children),
+                      )
+                    })
                     .collect();
                   if root_views.is_empty() {
-                    // 构建评论树映射
-
                     view! {
                       <p class="text-gray-400 text-center">"暂无评论，快来抢沙发！"</p>
                     }
@@ -264,11 +315,6 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
               })
           }}
         </Suspense>
-
       </div>
-    };
-
-    
-    result
+    }
 }
-
