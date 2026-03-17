@@ -8,9 +8,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 leptos = {version = "0.8.17",  default-features = false, features = ["csr"]}
-leptos_meta = { version = "0.8.6", optional = true}
 leptos_router = { version = "0.8.12",  default-features = false, features=["ssr"], optional = true}
-
 console_error_panic_hook = { version = "0.1", optional = true }
 wasm-bindgen = { version = "0.2.114", optional = true }
 serde = {version = "1.0.228", features=["derive"]}
@@ -20,26 +18,32 @@ tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 leptos_axum = { version = "0.8.8", optional = true }
 tower-http = { version = "0.6.8", features = ["cors"], optional = true }
 chrono = {version="0.4.44", features = ["serde"]}
+uuid = {version = "1.22.0", features = ["v4", "js"], optional=true}
+lettre = { version = "0.11.19", default-features = false, features = [
+    "smtp-transport",
+    "builder",
+    "tokio1-rustls-tls",
+], optional=true }
+http = "1.4.0"
+thiserror = "2.0.18"
 
 [features]
-# hydrate = [
-#     "leptos/hydrate",
-#     "dep:console_error_panic_hook",
-#     "dep:wasm-bindgen",
-# ]
 default = ["csr"]
-csr = ["leptos/csr", "leptos_meta", "leptos_router",
+csr = [
+"leptos/csr",
+"leptos_router",
 "dep:console_error_panic_hook",
 "dep:wasm-bindgen",
 ]
 ssr = [
+    "dep:uuid",
     "dep:axum",
     "dep:tokio",
     "dep:leptos_axum",
     "dep:sqlx",
     "dep:tower-http",
+    "dep:lettre",
     "leptos/ssr",
-    "leptos_meta/ssr",
     "leptos_router/ssr",
 ]
 
@@ -81,6 +85,9 @@ site-addr = "127.0.0.1:3000"
 
 # The port to use for automatic reload monitoring
 reload-port = 3001
+
+# The environment Leptos will run in, usually either "DEV" or "PROD"
+env = "DEV"
 
 #  The browserlist query used for optimizing the CSS.
 browserquery = "defaults"

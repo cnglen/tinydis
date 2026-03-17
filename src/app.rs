@@ -1,8 +1,11 @@
+use chrono::{FixedOffset, NaiveDateTime};
+use leptos::server_fn::codec::GetUrl;
 use leptos::{prelude::*, server};
+use leptos_router::components::{Route, Router, Routes};
 use serde::{Deserialize, Serialize};
-use chrono::{NaiveDateTime, FixedOffset};
 use std::collections::HashMap;
 use std::sync::Arc;
+use thiserror::Error;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
@@ -21,9 +24,8 @@ pub async fn get_comments(page_id: String) -> Result<Vec<Comment>, ServerFnError
     let comments = sqlx::query_as::<_, Comment>(
         "SELECT id, parent_id, user_name, content, created_at
          FROM comments
-         WHERE page_id = ?
-         -- WHERE page_id = ? AND status = 'approved'
-         ORDER BY created_at ASC"
+         WHERE page_id = ? AND status = 'approved'
+         ORDER BY created_at ASC",
     )
     .bind(page_id)
     .fetch_all(&pool)
@@ -31,27 +33,246 @@ pub async fn get_comments(page_id: String) -> Result<Vec<Comment>, ServerFnError
     Ok(comments)
 }
 
+#[cfg(feature = "ssr")]
+fn get_mail_config() -> (String, String, String, String, String) {
+    (
+        std::env::var("TINYDIS_SMTP_HOST").expect("TINYDIS_SMTP_HOST must be set"),
+        std::env::var("TINYDIS_SMTP_PORT").expect("TINYDIS_SMTP_HOST must be set"),
+        std::env::var("TINYDIS_SMTP_USERNAME").expect("TINYDIS_SMTP_USERNAME must be set"),
+        std::env::var("TINYDIS_SMTP_PASSWORD").expect("TINYDIS_SMTP_PASSWORD must be set"),
+        std::env::var("TINYDIS_ADMIN_EMAIL").expect("TINYDIS_ADMIN_EMAIL must be set"),
+    )
+}
+
+#[cfg(feature = "ssr")]
+async fn send_email(to: &str, subject: &str, body: &str, content_type: &str) -> Result<(), MailError> {
+    use lettre::{
+        message::Mailbox, transport::smtp::authentication::Credentials, AsyncSmtpTransport,
+        AsyncTransport, Message, Tokio1Executor, message::header
+    };
+    let (host, port, username, password, _) = get_mail_config();
+    let from: Mailbox = username
+        .parse()
+        .map_err(|e: lettre::address::AddressError| {
+            MailError::InvalidFromEmail(format!("{e}: {username}"))
+        })?;
+    let to: Mailbox = to
+        .parse()
+        .map_err(|e| MailError::InvalidFromEmail(format!("{e}: {to}")))?;
+
+    let content_type = match content_type {
+        "html" => header::ContentType::TEXT_HTML,
+        "plain" => header::ContentType::TEXT_PLAIN,
+        &_ => todo!()
+    };
+    
+    let email = Message::builder()
+        .from(from)
+        .to(to)
+        .subject(subject)
+        .header(content_type)         
+        .body(body.to_string())
+        .map_err(|e| MailError::BuildMessage(format!("Failed to build email: {}", e)))?;
+
+    
+    let port: u16 = port
+        .parse()
+        .map_err(|e| MailError::InvalidPort(format!("{e} {port}")))?;
+
+    let creds = Credentials::new(username, password);
+    let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(&host)
+        .map_err(|e| MailError::SmtpRelay(format!("SMTP relay error: {}", e)))?
+        .port(port)
+        .credentials(creds)
+        .build();
+
+    mailer
+        .send(email)
+        .await
+        .map_err(|e| MailError::SendMail(format!("Failed to send email: {}", e)))?;
+
+    Ok(())
+}
+
+#[derive(Debug, Error)]
+pub enum MailError {
+    #[error("Invalid email(from): {0}")]
+    InvalidFromEmail(String),
+    #[error("Invalid email(to): {0}")]
+    InvalidToEmail(String),
+    #[error("Unable to build message: {0}")]
+    BuildMessage(String),
+
+    #[error("Smtp relay error: {0}")]
+    SmtpRelay(String),
+
+    #[error("Unable to send mail: {0}")]
+    SendMail(String),
+
+    #[error("Invalid port: {0}")]
+    InvalidPort(String),
+}
+
 #[server]
 pub async fn add_comment(
     page_id: String,
     user_name: String,
-    user_email: String,
     content: String,
     parent_id: Option<i64>,
 ) -> Result<(), ServerFnError> {
+    use chrono::{Duration, Utc};
+    use leptos::server_fn::ServerFn;
     use sqlx::SqlitePool;
+    use uuid::Uuid;
     let pool = expect_context::<SqlitePool>();
-    sqlx::query(
-        "INSERT INTO comments (page_id, user_name, user_email, content, parent_id, status) 
-         VALUES (?, ?, ?, ?, ?, 'pending')"
+    let result = sqlx::query(
+        "INSERT INTO comments (page_id, user_name, content, parent_id, status) 
+         VALUES (?, ?, ?, ?, 'pending')",
     )
     .bind(page_id)
-    .bind(user_name)
-    .bind(user_email)
-    .bind(content)
+    .bind(user_name.clone())
+    .bind(content.clone())
     .bind(parent_id)
     .execute(&pool)
     .await?;
+    let comment_id = result.last_insert_rowid();
+
+    let token = Uuid::new_v4().to_string();
+    let expires_at = Utc::now() + Duration::days(7); // 有效期7天
+    sqlx::query("INSERT INTO review_tokens (comment_id, token, expires_at) VALUES (?, ?, ?)")
+        .bind(comment_id)
+        .bind(&token)
+        .bind(expires_at.naive_utc())
+        .execute(&pool)
+        .await?;
+
+    let (_, _, _, _, admin_email) = get_mail_config();
+    let base_url = std::env::var("TINYDIS_SERVER_ADDR").unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let approve_link = format!("{}{}?token={}", base_url, ApproveComment::url(), token);
+    let reject_link = format!("{}{}?token={}", base_url, RejectComment::url(), token);
+
+    // let text_body = format!(
+    //     "新评论需要审核：\n\n用户名：{}\n内容：{}\n\n批准：{}\n拒绝：{}\n\n链接有效期7天。",
+    //     user_name, content, approve_link, reject_link
+    // );
+
+    let email_body = format!(
+        r#"<p>新评论需要审核：</p>
+         <p>用户名：{}</p>
+         <p>内容：{}</p>
+         <p>
+           <ul>
+             <li><a href="{}" style="color: green">批准</a></li>
+             <li><a href="{}" style="color: red">拒绝</a></li>
+           </ul>
+         </p>
+         <p>链接有效期7天。</p>"#,
+        user_name, content, approve_link, reject_link
+    );
+    
+    tokio::spawn(async move {
+        if let Err(e) = send_email(&admin_email, "新评论审核", &email_body, "html").await {
+            eprintln!("Failed to send admin email: {}", e);
+        }
+    });
+
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
+struct ReviewToken {
+    id: i64,
+    comment_id: i64,
+    token: String,
+    expires_at: NaiveDateTime,
+}
+
+#[server(endpoint="review/approve_comment", input=GetUrl)]
+pub async fn approve_comment(token: String) -> Result<(), ServerFnError> {
+    use chrono::Utc;
+    use sqlx::SqlitePool;
+
+    let pool = expect_context::<SqlitePool>();
+
+    let token_record: Option<ReviewToken> = sqlx::query_as(
+        "SELECT id, comment_id, token, expires_at
+         FROM review_tokens
+         WHERE token = ?",
+    )
+    .bind(&token)
+    .fetch_optional(&pool)
+    .await?;
+
+    let result = match token_record {
+        Some(r) if r.expires_at > Utc::now().naive_utc() => {
+            sqlx::query(
+                "UPDATE comments
+         SET status='approved'
+         WHERE id = ?",
+            )
+            .bind(r.comment_id)
+            .execute(&pool)
+            .await?;
+
+            sqlx::query("DELETE FROM review_tokens WHERE id=?")
+                .bind(r.id)
+                .execute(&pool)
+                .await?;
+            "approved"
+        }
+        Some(_) => "expired",
+        None => "invalid",
+    };
+
+    let redirect_url = format!("/review-result?result={}", result);
+    leptos_axum::redirect(&redirect_url);
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+#[server(endpoint="review/reject_comment", input=GetUrl)]
+pub async fn reject_comment(token: String) -> Result<(), ServerFnError> {
+    println!("reject ...");
+    use chrono::Utc;
+    use sqlx::SqlitePool;
+
+    let pool = expect_context::<SqlitePool>();
+
+    let token_record: Option<ReviewToken> = sqlx::query_as(
+        "SELECT id, comment_id, token, expires_at
+         FROM review_tokens
+         WHERE token = ?",
+    )
+    .bind(&token)
+    .fetch_optional(&pool)
+    .await?;
+
+    let result = match token_record {
+        Some(r) if r.expires_at > Utc::now().naive_utc() => {
+            sqlx::query(
+                "UPDATE comments
+         SET status='rejected'
+         WHERE id = ?",
+            )
+            .bind(r.comment_id)
+            .execute(&pool)
+            .await?;
+
+            sqlx::query("DELETE FROM review_tokens WHERE id=?")
+                .bind(r.id)
+                .execute(&pool)
+                .await?;
+
+            "rejected"
+        }
+        Some(_) => "expired",
+        None => "invalid",
+    };
+
+    let redirect_url = format!("/review-result?result={}", result);
+    leptos_axum::redirect(&redirect_url);
     Ok(())
 }
 
@@ -75,13 +296,6 @@ fn InlineReplyForm(
                 type="text"
                 name="user_name"
                 placeholder="昵称"
-                required
-              />
-              <input
-                class="flex-1 p-2 text-xs border border-gray-300 rounded"
-                type="email"
-                name="user_email"
-                placeholder="邮箱"
                 required
               />
             </div>
@@ -122,7 +336,10 @@ fn comment_thread(
     add_comment: ServerAction<AddComment>,
     page_id: Arc<String>,
 ) -> AnyView {
-    let children = all_comments.get(&Some(comment.id)).cloned().unwrap_or_default();
+    let children = all_comments
+        .get(&Some(comment.id))
+        .cloned()
+        .unwrap_or_default();
 
     let children_views: Vec<AnyView> = children
         .into_iter()
@@ -141,8 +358,12 @@ fn comment_thread(
     let comment_id = comment.id;
     let comment_user_name = comment.user_name.clone();
     let comment_content = comment.content.clone();
-    let timezone_shanghai = FixedOffset::east_opt(8 * 3600).unwrap(); 
-    let comment_date = comment.created_at.and_utc().with_timezone(&timezone_shanghai).to_rfc3339();
+    let timezone_shanghai = FixedOffset::east_opt(8 * 3600).unwrap();
+    let comment_date = comment
+        .created_at
+        .and_utc()
+        .with_timezone(&timezone_shanghai)
+        .to_rfc3339();
 
     let is_expanded = move || expanded_reply.get() == Some(comment_id);
     let on_reply_click = move |_| {
@@ -208,7 +429,7 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
     let page_id_cloned = Arc::clone(&page_id_arc);
     let comments_resource = Resource::new(
         move || (add_comment.version().get(), page_id_cloned.clone()),
-        move |(_, pid_arc)| get_comments((*pid_arc).clone())
+        move |(_, pid_arc)| get_comments((*pid_arc).clone()),
     );
 
     Effect::new(move |_| {
@@ -234,21 +455,12 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
                   required
                 />
               </div>
-              <div class="flex flex-1">
-                <label class="min-w-10 text-[#444] text-xs text-center py-3 px-2">邮箱</label>
-                <input
-                  class="resize-none w-0 text-[0.625em] flex-1 p-2 bg-transparent"
-                  type="email"
-                  name="user_email"
-                  required
-                />
-              </div>
             </div>
 
             <textarea
               class="relative resize-y box-border w-[calc(100%-1em)] min-h-32 text-xs my-3 mx-2 rounded-xs bg-transparent"
               name="content"
-              placeholder="欢迎评论 (评论列表中只展示昵称，邮箱仅用于后台审核、通知)"
+              placeholder="欢迎评论"
               required
             ></textarea>
 
@@ -318,3 +530,37 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
       </div>
     }
 }
+
+#[component]
+fn ReviewResult() -> impl IntoView {
+    use leptos_router::hooks::use_query_map;
+    let query = use_query_map();
+    let result = move || query.get().get("result").unwrap_or_default();
+
+    view! {
+      <div class="p-4">
+        {move || match result().as_str() {
+          "approved" => view! { <h1 class="text-green-600">"✅ 审核成功：已经通过"</h1> },
+          "rejected" => view! { <h1 class="text-red-600">"✅ 审核成功：已经拒绝"</h1> },
+          "expired" => view! { <h1 class="text-yellow-600">"❌：⏰ 链接已过期"</h1> },
+          "invalid" => view! { <h1 class="text-yellow-600">"❌：⏰ 链接无效"</h1> },
+          _ => view! { <h1 class="a">"❌ ℹ️ 未知状态"</h1> },
+        }}
+      </div>
+    }
+}
+
+// provide review-result page
+#[component]
+pub fn App() -> impl IntoView {
+    use leptos_router::path;
+    view! {
+      <Router>
+        <Routes fallback=|| "Not found">
+          <Route path=path!("/review-result") view=ReviewResult />
+          <Route path=path!("/*any") view=|| view! { <h1>"Not found"</h1> } />
+        </Routes>
+      </Router>
+    }
+}
+

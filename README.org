@@ -1,58 +1,58 @@
 * tinydis
 
-A tiny discusstion plugin without need to login, implented by leptos 
-
+A tiny and anonymous discussion plugin implented by Rust.
 
 ** dev
 
 #+begin_src bash
-cargo install cargo-leptos --locked
-cargo leptos watch
+  cargo install cargo-leptos --locked
+  cargo leptos watch
+  cargo leptos build
 #+end_src
 
+** usage 
 
-** useage 
 
 #+begin_src bash
-cargo leptos build --release
-
-cargo leptos build -r && mv target/site/assets/tinydis.wasm  target/site/assets/tinydis_bg.wasm && cp -r ./target/site/assets/ ~/note/static/ && cp -r ./target/site/assets/* ~/repos/windancer_main/public/assets/
+  export TINYDIS_SMTP_USERNAME=your_email_to_send_review_message
+  export TINYDIS_SMTP_PASSWORD=your_password_to_send_review_message   # an App password is prefered to regular parssword
+  export TINYDIS_SMTP_HOST=your_smtp_host
+  export TINYDIS_SMTP_PORT=your_smtp_port
+  export TINYDIS_ADMIN_EMAIL=admin_email_to_receive_review_message
+  export TINYDIS_ALLOWED_ORIGINS="*" # ALLOWED ORIGIN for backend server, such as "http://127.0.0.1:8080,http://127.0.0.1:9999"
+  export LEPTOS_SITE_ADDR="127.0.0.1:3000" # backend site ip:port
+  export TINYDIS_SERVER_ADDR="http://${LEPTOS_SITE_ADDR}" # use https or http
 #+end_src
 
+#+begin_src bash
+  cargo install --locked cargo-leptos
+  cargo leptos build --release && mv target/site/assets/tinydis.wasm  target/site/assets/tinydis_bg.wasm
+  cp -r ./target/site/assets YOUR_SITE_ROOT_PATH
+#+end_src
 
+html head:
 
-Will generate your server binary in target/release and your site package in target/site
+#+begin_src html
+  <link rel="stylesheet" href="/assets/tinydis.css" />
+#+end_src
 
-## Testing Your Project
-```bash
-cargo leptos end-to-end
-```
+html body:
 
-```bash
-cargo leptos end-to-end --release
-```
+#+begin_src html
+  <div id="tinydis" data-server-url="TINYDIS_SERVER_ADDR"></div>
+  <script type="module">
+    import init from '/assets/tinydis.js';
+    init();
+  </script>
+#+end_src
 
-Cargo-leptos uses Playwright as the end-to-end test tool.
-Tests are located in end2end/tests directory.
+Or you can explictly set data-page-id
+#+begin_src html
+  <div id="tinydis" data-page-id="YOUR_PAGE_ID" data-server-url="TINYDIS_SERVER_ADDR"></div>
+  <script type="module">
+    import init from '/assets/tinydis.js';
+    init();
+  </script>
+#+end_src
 
-## Executing a Server on a Remote Machine Without the Toolchain
-After running a `cargo leptos build --release` the minimum files needed are:
-
-1. The server binary located in `target/server/release`
-2. The `site` directory and all files within located in `target/site`
-
-Copy these files to your remote server. The directory structure should be:
-```text
-tinydis
-site/
-```
-Set the following environment variables (updating for your project as needed):
-```sh
-export LEPTOS_OUTPUT_NAME="tinydis"
-export LEPTOS_SITE_ROOT="site"
-export LEPTOS_SITE_PKG_DIR="pkg"
-export LEPTOS_SITE_ADDR="127.0.0.1:3000"
-export LEPTOS_RELOAD_PORT="3001"
-```
-Finally, run the server binary.
 
