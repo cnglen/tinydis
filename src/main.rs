@@ -1,5 +1,10 @@
 pub mod app;
 
+fn strip_protocol(url: &str) -> &str {
+    url.strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))
+        .unwrap_or(url)
+}
 
 
 #[cfg(feature = "ssr")]
@@ -65,7 +70,12 @@ CREATE TABLE IF NOT EXISTS review_tokens (
 COMMIT;")
         .execute(&pool).await.unwrap();
 
-    let conf = get_configuration(None).unwrap();
+    let mut conf = get_configuration(None).unwrap();
+    let addr_str = env::var("TINYDIS_SERVER_ADDR").expect("TINYDIS_SERVER_ADDR must be set");
+    let addr_str = strip_protocol(&addr_str).to_string();
+    let addr: std::net::SocketAddr = addr_str.parse().expect("Invalid socket address format");
+    conf.leptos_options.site_addr=addr;
+
     let addr = conf.leptos_options.site_addr;
     let leptos_options = conf.leptos_options;
     // log!("{:#?}", leptos_options);

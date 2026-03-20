@@ -341,43 +341,46 @@ fn InlineReplyForm(
           <input type="hidden" name="parent_id" value=parent_id.to_string() />
 
           <div class="flex flex-col space-y-2">
-            <div class="flex space-x-2">
-              <input
-                class="flex-1 p-2 text-xs border border-gray-300 rounded"
-                type="text"
-                name="user_name"
-                placeholder="昵称"
-                prop:value=user_name
-                on:input=move |ev| set_user_name.run(event_target_value(&ev))
-                required
-              />
-            </div>
             <textarea
-              class="w-full p-2 text-xs border border-gray-300 rounded"
+              class="w-full p-2 text-xs border border-gray-300 rounded outline-0"
               name="content"
               placeholder="写下你的回复..."
               prop:value=content
               on:input=move |ev| set_content.run(event_target_value(&ev))
-              rows="2"
+              rows="3"
               required
             ></textarea>
-            <div class="flex justify-end space-x-2">
-              <button
-                type="button"
-                class="px-3 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer"
-                on:click=move |_| {
-                  set_active_reply_parent_id.set(None);
-                }
-              >
-                "取消"
-              </button>
-              <button
-                type="submit"
-                class="px-3 py-1 text-xs text-white bg-blue-500 rounded hover:bg-blue-600 disabled:bg-blue-300 cursor-pointer"
-                disabled=move || add_comment.pending().get()
-              >
-                {move || { if add_comment.pending().get() { "发送中..." } else { "提交" } }}
-              </button>
+            <div class="relative flex flex-wrap my-1">
+              <div class="flex flex-1">
+                <input
+                  class="flex p-2 text-xs border border-gray-300 rounded"
+                  type="text"
+                  name="user_name"
+                  placeholder="昵称"
+                  prop:value=user_name
+                  on:input=move |ev| set_user_name.run(event_target_value(&ev))
+                  required
+                />
+              </div>
+              <div class="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  class="px-3 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer"
+                  on:click=move |_| {
+                    set_active_reply_parent_id.set(None);
+                  }
+                >
+                  "取消"
+                </button>
+                <button
+                  type="submit"
+                  class="px-3 py-1 text-xs text-white bg-blue-500 rounded hover:bg-blue-600 disabled:bg-blue-300 cursor-pointer"
+                  disabled=move || add_comment.pending().get()
+                >
+                  {move || { if add_comment.pending().get() { "发送中..." } else { "提交" } }}
+                </button>
+              </div>
+
             </div>
           </div>
         </ActionForm>
@@ -575,21 +578,8 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
             <input type="hidden" name="page_id" value=page_id_for_top_form.to_string() />
 
             <div class="relative shrink w-full m-2 rounded-xl border border-solid border-gray-300 mb-5">
-              <div class="flex rounded-t-xl overflow-hidden px-1 border-b-2 border-dashed border-b-gray-300">
-                <div class="flex flex-1">
-                  <label class="min-w-10 text-[#444] text-xs text-center py-3 px-2">昵称</label>
-                  <input
-                    class="resize-none w-0 text-[0.625em] flex-1 p-2 bg-transparent"
-                    type="text"
-                    name="user_name"
-                    bind:value=(user_name_main_form, set_user_name_main_form)
-                    required
-                  />
-                </div>
-              </div>
-
               <textarea
-                class="relative resize-y box-border w-[calc(100%-1em)] min-h-32 text-xs my-3 mx-2 rounded-xs bg-transparent"
+                class="relative resize-y box-border w-[calc(100%-1em)] min-h-32 text-xs my-3 mx-2 rounded-xs bg-transparent outline-0"
                 name="content"
                 bind:value=(content_main_form, set_content_main_form)
                 placeholder="欢迎评论"
@@ -597,6 +587,17 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
               ></textarea>
 
               <div class="relative flex flex-wrap mx-2 my-3">
+                <div class="flex flex-1">
+                  <input
+                    class="resize-none w-0 text-[0.625em] flex-1 p-2 bg-transparent outline-gray-300"
+                    type="text"
+                    name="user_name"
+                    bind:value=(user_name_main_form, set_user_name_main_form)
+                    placeholder="昵称"
+                    required
+                  />
+                </div>
+
                 <div class="flex items-center justify-end flex-3 flex-shrink">
                   <button
                     type="submit"
