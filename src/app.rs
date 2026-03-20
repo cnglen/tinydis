@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use leptos::logging::log;
 
 #[derive(Clone, Default)]
 struct ReplyDraft {
@@ -37,6 +36,7 @@ pub async fn get_comments(page_id: String) -> Result<Vec<Comment>, ServerFnError
     .bind(page_id)
     .fetch_all(&pool)
     .await?;
+
     Ok(comments)
 }
 
@@ -44,7 +44,7 @@ pub async fn get_comments(page_id: String) -> Result<Vec<Comment>, ServerFnError
 fn get_mail_config() -> (String, String, String, String, String) {
     (
         std::env::var("TINYDIS_SMTP_HOST").expect("TINYDIS_SMTP_HOST must be set"),
-        std::env::var("TINYDIS_SMTP_PORT").expect("TINYDIS_SMTP_HOST must be set"),
+        std::env::var("TINYDIS_SMTP_PORT").expect("TINYDIS_SMTP_PORT must be set"),
         std::env::var("TINYDIS_SMTP_USERNAME").expect("TINYDIS_SMTP_USERNAME must be set"),
         std::env::var("TINYDIS_SMTP_PASSWORD").expect("TINYDIS_SMTP_PASSWORD must be set"),
         std::env::var("TINYDIS_ADMIN_EMAIL").expect("TINYDIS_ADMIN_EMAIL must be set"),
@@ -126,6 +126,15 @@ pub struct AddCommentResponse {
     parent_id: Option<i64>,
 }
 
+/// # Arguments
+/// - `page_id`: page id
+/// - `user_name`: user name
+/// - `content`: content
+/// - `parent_id`: parent id 
+/// - `form_id`: "main"/"inline"
+/// 
+/// # Returns
+/// A `AddCommentResponse`, where `parent_id` is used to update reply draft and `form_id` is used to show_main_form
 #[server]
 pub async fn add_comment(
     page_id: String,
@@ -290,23 +299,17 @@ pub async fn reject_comment(token: String) -> Result<(), ServerFnError> {
     Ok(())
 }
 
-// todo: set_expanded is_expanded
 #[component]
 fn InlineReplyForm(
     page_id: Arc<String>,
     parent_id: i64,
     add_comment: ServerAction<AddComment>,
-    set_expanded: WriteSignal<Option<i64>>,
-    set_show_main_form: WriteSignal<bool>,
-    is_expanded: Signal<bool>,
+    active_reply_parent_id: ReadSignal<Option<i64>>,    
+    set_active_reply_parent_id: WriteSignal<Option<i64>>,
     draft: Signal<ReplyDraft>,
     set_draft: Callback<ReplyDraft>,    
 ) -> impl IntoView {
 
-    // let (user_name, set_user_name) = signal(String::new());
-    // let (content, set_content) = signal(String::new());
-
-    // 派生读写信号
     let user_name = Signal::derive(move || draft.get().user_name);
     let set_user_name = Callback::new(move |new_name: String| {
         let current = draft.get_untracked();
@@ -324,11 +327,16 @@ fn InlineReplyForm(
             content: new_content,
         });
     });    
+
+    let show_inline_reply_form = Signal::derive(move || active_reply_parent_id.get() == Some(parent_id));
     
     view! {
-      <div class="mt-3 mb-2 border border-blue-200 rounded-lg p-3 bg-blue-50" style:display=move || if is_expanded.get() { "block" } else { "none" }>
+      <div
+        class="mt-3 mb-2 border border-blue-200 rounded-lg p-3 bg-blue-50"
+        style:display=move || if show_inline_reply_form.get() { "block" } else { "none" }
+      >
         <ActionForm action=add_comment>
-          <input type="hidden" name="form_id" value="inline" />            
+          <input type="hidden" name="form_id" value="inline" />
           <input type="hidden" name="page_id" value=page_id.to_string() />
           <input type="hidden" name="parent_id" value=parent_id.to_string() />
 
@@ -339,9 +347,8 @@ fn InlineReplyForm(
                 type="text"
                 name="user_name"
                 placeholder="昵称"
-        // bind:value=(user_name, set_user_name)
-                            prop:value=user_name
-                            on:input=move |ev| set_user_name.run(event_target_value(&ev))            
+                prop:value=user_name
+                on:input=move |ev| set_user_name.run(event_target_value(&ev))
                 required
               />
             </div>
@@ -349,9 +356,8 @@ fn InlineReplyForm(
               class="w-full p-2 text-xs border border-gray-300 rounded"
               name="content"
               placeholder="写下你的回复..."
-            // bind:value=(content, set_content)
-                        prop:value=content
-                        on:input=move |ev| set_content.run(event_target_value(&ev))            
+              prop:value=content
+              on:input=move |ev| set_content.run(event_target_value(&ev))
               rows="2"
               required
             ></textarea>
@@ -360,8 +366,7 @@ fn InlineReplyForm(
                 type="button"
                 class="px-3 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer"
                 on:click=move |_| {
-                  set_expanded.set(None);
-                  set_show_main_form.set(true);
+                  set_active_reply_parent_id.set(None);
                 }
               >
                 "取消"
@@ -384,11 +389,10 @@ fn InlineReplyForm(
 fn comment_thread(
     comment: Comment,
     all_comments: HashMap<Option<i64>, Vec<Comment>>,
-    expanded_reply: ReadSignal<Option<i64>>,
-    set_expanded_reply: WriteSignal<Option<i64>>,
+    active_reply_parent_id: ReadSignal<Option<i64>>,
+    set_active_reply_parent_id: WriteSignal<Option<i64>>,
     add_comment: ServerAction<AddComment>,
     page_id: Arc<String>,
-    set_show_main_form: WriteSignal<bool>,
     reply_drafts: ReadSignal<HashMap<i64, ReplyDraft>>,
     set_reply_drafts: WriteSignal<HashMap<i64, ReplyDraft>>,    
 ) -> AnyView {
@@ -403,11 +407,11 @@ fn comment_thread(
             comment_thread(
                 child,
                 all_comments.clone(),
-                expanded_reply,
-                set_expanded_reply,
+                active_reply_parent_id,
+                set_active_reply_parent_id,
                 add_comment.clone(),
                 Arc::clone(&page_id),
-                set_show_main_form,
+                // set_show_main_form,
                 reply_drafts,
                 set_reply_drafts,                
             )
@@ -424,12 +428,7 @@ fn comment_thread(
         .with_timezone(&timezone_shanghai)
         .to_rfc3339();
 
-    // InlineReplyForm should be expanded?
-    let is_expanded = Signal::derive(move || expanded_reply.get() == Some(comment_id));
-
-    // 为当前评论生成草稿信号和 setter
-    let comment_id = comment.id;
-    let draft_signal = Signal::derive(move || {
+    let draft = Signal::derive(move || {
         reply_drafts.with(|d| d.get(&comment_id).cloned().unwrap_or_default())
     });
     let set_draft = Callback::new(move |new_draft: ReplyDraft| {
@@ -439,14 +438,11 @@ fn comment_thread(
     });
     
     // 💬 listener: toggle expanded_replay between None <--> Some(comment_id)
-    use leptos::logging::log;    
     let on_reply_click = move |_| {
-        if expanded_reply.get() == Some(comment_id) {
-            set_show_main_form.set(true);
-            set_expanded_reply.set(None);
+        if active_reply_parent_id.get() == Some(comment_id) {
+            set_active_reply_parent_id.set(None);
         } else {
-            set_show_main_form.set(false);
-            set_expanded_reply.set(Some(comment_id));
+            set_active_reply_parent_id.set(Some(comment_id));
         }
     };
 
@@ -468,20 +464,18 @@ fn comment_thread(
         </div>
         <p class="mt-1 text-gray-700">{comment_content.clone()}</p>
 
-        { 
-            view! {
-              <InlineReplyForm
-                page_id=page_id.clone()
-                parent_id=comment_id
-                add_comment=add_comment.clone()
-                set_expanded=set_expanded_reply
-                set_show_main_form=set_show_main_form
-                is_expanded=is_expanded
-                draft=draft_signal
-                set_draft=set_draft                    
-              />
-            }
-           
+        {
+          view! {
+            <InlineReplyForm
+              page_id=page_id.clone()
+              parent_id=comment_id
+              add_comment=add_comment.clone()
+              active_reply_parent_id=active_reply_parent_id
+              set_active_reply_parent_id=set_active_reply_parent_id
+              draft=draft
+              set_draft=set_draft
+            />
+          }
         }
         {children_views}
       </div>
@@ -491,8 +485,6 @@ fn comment_thread(
 
 #[component]
 pub fn CommentSystem(page_id: String) -> impl IntoView {
-    use leptos::logging::log;
-    
     let page_id = if page_id.is_empty() {
         let location = leptos::web_sys::window().unwrap().location();
         location.pathname().unwrap()
@@ -503,20 +495,19 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
     let page_id_for_children = Arc::clone(&page_id_arc);
     let page_id_for_top_form = Arc::clone(&page_id_arc);
     let page_id_for_resource = Arc::clone(&page_id_arc);
-    
-    let (show_main_form, set_show_main_form) = signal(true);
 
-    // if the reply bubble is first clicked: current reply's parent id, e.g, Some(comment_id)
+    // 当前活跃的回复表单对应的parent comment's id, 若回复成功，新增comment的parent_id    
+    // if the reply bubble is first clicked: current active reply's parent id, e.g, Some(comment_id)
     // if the reply bubble is clicked again: None
-    let (expanded_reply, set_expanded_reply) = signal(None::<i64>); 
+    let (active_reply_parent_id, set_active_reply_parent_id) = signal(None::<i64>);
 
-    let (n_comments_submitted, set_n_comments_submitted) = signal(0 as usize);    
+    // (page_id, n_comments_submitted) -drive-> comments_resource -> comments list
+    let (n_comments_submitted, set_n_comments_submitted) = signal(0 as usize);
     let add_comment = ServerAction::<AddComment>::new();
     let comments_resource = Resource::new(
         move || (n_comments_submitted.get(), page_id_for_resource.clone()),
         move |(_, pid_arc)| get_comments((*pid_arc).clone()),
     );
-
 
     let (user_name_main_form, set_user_name_main_form) = signal(String::new());
     let (content_main_form, set_content_main_form) = signal(String::new());
@@ -524,10 +515,15 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
     // where action is resued by inline and main form
     let (submitted_result_message, set_submitted_result_message) = signal(String::new());
 
+    // reply drafts of each comment: parent_id -> draft
     let (reply_drafts, set_reply_drafts) = signal(HashMap::<i64, ReplyDraft>::new());
-    
-    
-                
+
+    // add_comment:<Action>'s value, which is a signal, drives
+    // - n_comments_submitted
+    // - submitted_result_message
+    // - user_name_main_form/content_main_form
+    // - active_reply_parent_id
+    // - reply_drafts
     Effect::new(move |_| {
         let result = add_comment.value().get();
         match result {
@@ -535,21 +531,22 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
                 *set_n_comments_submitted.write() +=1;
                 // log!("add_comment submitted: ok");
                 // log!("  form_id={}", resp.form_id);
+                set_submitted_result_message.set("已提交，审核中".to_string());
                 match resp.form_id.as_str() {
                     "main" => {
-                        set_submitted_result_message.set("已提交，审核中".to_string());
+                        // clear content of main-form
                         set_user_name_main_form.set(String::new());
                         set_content_main_form.set(String::new());
                     }
                     "inline" => {
-                        set_submitted_result_message.set("已提交，审核中".to_string());
-                        set_expanded_reply.set(None);
-                        set_show_main_form.set(true);
+                        // close inline-form, open main-form
+                        set_active_reply_parent_id.set(None);
+                        // set_show_main_form.set(true);
                         if let Some(parent_id) = resp.parent_id {
                             set_reply_drafts.update(|d| {
                                 d.remove(&parent_id);
                             });
-                        }                        
+                        }
                     }
                     _ => {}
                 }
@@ -568,9 +565,12 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
     view! {
       <div class="comment-container mt-4">
         <div class="text-sm mb-2 text-center">{submitted_result_message}</div>
-            
-        <div style:display=move || if show_main_form.get() { "block" } else { "none" }>
-            <ActionForm action=add_comment>
+
+        // show main-form if no active reply form (active_reply_parent_id is None)
+        <div style:display=move || {
+          if active_reply_parent_id.get().is_none() { "block" } else { "none" }
+        }>
+          <ActionForm action=add_comment>
             <input type="hidden" name="form_id" value="main" />
             <input type="hidden" name="page_id" value=page_id_for_top_form.to_string() />
 
@@ -615,7 +615,10 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
         <div>
           <div class="text-xl">"评论"</div>
         </div>
-        <Suspense fallback=|| { view! { <p>"加载中..."</p> } }> {move || {
+        <Suspense fallback=|| {
+          view! { <p>"加载中..."</p> }
+        }>
+          {move || {
             comments_resource
               .get()
               .map(|res| match res {
@@ -634,13 +637,12 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
                       comment_thread(
                         root,
                         map.clone(),
-                        expanded_reply,
-                        set_expanded_reply,
+                        active_reply_parent_id,
+                        set_active_reply_parent_id,
                         add_comment.clone(),
                         Arc::clone(&page_id_for_children),
-                          set_show_main_form,
-                          reply_drafts,
-                          set_reply_drafts,
+                        reply_drafts,
+                        set_reply_drafts,
                       )
                     })
                     .collect();

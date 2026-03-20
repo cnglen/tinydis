@@ -44,7 +44,7 @@ async fn main() {
     sqlx::query("BEGIN;
 CREATE TABLE IF NOT EXISTS comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT, -- unique id
-    parent_id INTEGER,
+    parent_id INTEGER,                    -- parent id, null if current comment is root comment
     page_id TEXT NOT NULL,                -- id of page,
     user_name TEXT NOT NULL,              -- user name
     content TEXT NOT NULL,                -- content of comment
@@ -96,8 +96,8 @@ COMMIT;")
             move || provide_context(pool_.clone()),
             App,
         )
-        // .layer(CorsLayer::permissive()) // todo: restrict
-        .layer(build_cors()) // todo: restrict        
+        // .layer(CorsLayer::permissive()) // for debug
+        .layer(build_cors())
         .with_state(leptos_options)
         ;
 
