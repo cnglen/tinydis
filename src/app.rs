@@ -6,6 +6,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
+use leptos::logging::log;
+
+#[derive(Clone, Default)]
+struct ReplyDraft {
+    user_name: String,
+    content: String,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
@@ -113,13 +120,21 @@ pub enum MailError {
     InvalidPort(String),
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AddCommentResponse {
+    form_id: String,
+    parent_id: Option<i64>,
+}
+
 #[server]
 pub async fn add_comment(
     page_id: String,
     user_name: String,
     content: String,
     parent_id: Option<i64>,
-) -> Result<(), ServerFnError> {
+    form_id: String,
+) -> Result<AddCommentResponse, ServerFnError> {
+    // log!("add comment ...");
     use chrono::{Duration, Utc};
     use leptos::server_fn::ServerFn;
     use sqlx::SqlitePool;
@@ -176,7 +191,7 @@ pub async fn add_comment(
         }
     });
 
-    Ok(())
+    Ok(AddCommentResponse { form_id, parent_id })
 }
 
 #[cfg(feature = "ssr")]
@@ -234,7 +249,6 @@ pub async fn approve_comment(token: String) -> Result<(), ServerFnError> {
 #[cfg(feature = "ssr")]
 #[server(endpoint="review/reject_comment", input=GetUrl)]
 pub async fn reject_comment(token: String) -> Result<(), ServerFnError> {
-    println!("reject ...");
     use chrono::Utc;
     use sqlx::SqlitePool;
 
@@ -276,16 +290,45 @@ pub async fn reject_comment(token: String) -> Result<(), ServerFnError> {
     Ok(())
 }
 
+// todo: set_expanded is_expanded
 #[component]
 fn InlineReplyForm(
     page_id: Arc<String>,
     parent_id: i64,
     add_comment: ServerAction<AddComment>,
     set_expanded: WriteSignal<Option<i64>>,
+    set_show_main_form: WriteSignal<bool>,
+    is_expanded: Signal<bool>,
+    draft: Signal<ReplyDraft>,
+    set_draft: Callback<ReplyDraft>,    
 ) -> impl IntoView {
+
+    // let (user_name, set_user_name) = signal(String::new());
+    // let (content, set_content) = signal(String::new());
+
+    // 派生读写信号
+    let user_name = Signal::derive(move || draft.get().user_name);
+    let set_user_name = Callback::new(move |new_name: String| {
+        let current = draft.get_untracked();
+        set_draft.run(ReplyDraft {
+            user_name: new_name,
+            content: current.content,
+        });
+    });
+
+    let content = Signal::derive(move || draft.get().content);
+    let set_content = Callback::new(move |new_content: String| {
+        let current = draft.get_untracked();
+        set_draft.run(ReplyDraft {
+            user_name: current.user_name,
+            content: new_content,
+        });
+    });    
+    
     view! {
-      <div class="mt-3 mb-2 border border-blue-200 rounded-lg p-3 bg-blue-50">
+      <div class="mt-3 mb-2 border border-blue-200 rounded-lg p-3 bg-blue-50" style:display=move || if is_expanded.get() { "block" } else { "none" }>
         <ActionForm action=add_comment>
+          <input type="hidden" name="form_id" value="inline" />            
           <input type="hidden" name="page_id" value=page_id.to_string() />
           <input type="hidden" name="parent_id" value=parent_id.to_string() />
 
@@ -296,6 +339,9 @@ fn InlineReplyForm(
                 type="text"
                 name="user_name"
                 placeholder="昵称"
+        // bind:value=(user_name, set_user_name)
+                            prop:value=user_name
+                            on:input=move |ev| set_user_name.run(event_target_value(&ev))            
                 required
               />
             </div>
@@ -303,6 +349,9 @@ fn InlineReplyForm(
               class="w-full p-2 text-xs border border-gray-300 rounded"
               name="content"
               placeholder="写下你的回复..."
+            // bind:value=(content, set_content)
+                        prop:value=content
+                        on:input=move |ev| set_content.run(event_target_value(&ev))            
               rows="2"
               required
             ></textarea>
@@ -310,7 +359,10 @@ fn InlineReplyForm(
               <button
                 type="button"
                 class="px-3 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer"
-                on:click=move |_| set_expanded.set(None)
+                on:click=move |_| {
+                  set_expanded.set(None);
+                  set_show_main_form.set(true);
+                }
               >
                 "取消"
               </button>
@@ -328,6 +380,7 @@ fn InlineReplyForm(
     }
 }
 
+
 fn comment_thread(
     comment: Comment,
     all_comments: HashMap<Option<i64>, Vec<Comment>>,
@@ -335,6 +388,9 @@ fn comment_thread(
     set_expanded_reply: WriteSignal<Option<i64>>,
     add_comment: ServerAction<AddComment>,
     page_id: Arc<String>,
+    set_show_main_form: WriteSignal<bool>,
+    reply_drafts: ReadSignal<HashMap<i64, ReplyDraft>>,
+    set_reply_drafts: WriteSignal<HashMap<i64, ReplyDraft>>,    
 ) -> AnyView {
     let children = all_comments
         .get(&Some(comment.id))
@@ -351,6 +407,9 @@ fn comment_thread(
                 set_expanded_reply,
                 add_comment.clone(),
                 Arc::clone(&page_id),
+                set_show_main_form,
+                reply_drafts,
+                set_reply_drafts,                
             )
         })
         .collect();
@@ -365,11 +424,28 @@ fn comment_thread(
         .with_timezone(&timezone_shanghai)
         .to_rfc3339();
 
-    let is_expanded = move || expanded_reply.get() == Some(comment_id);
+    // InlineReplyForm should be expanded?
+    let is_expanded = Signal::derive(move || expanded_reply.get() == Some(comment_id));
+
+    // 为当前评论生成草稿信号和 setter
+    let comment_id = comment.id;
+    let draft_signal = Signal::derive(move || {
+        reply_drafts.with(|d| d.get(&comment_id).cloned().unwrap_or_default())
+    });
+    let set_draft = Callback::new(move |new_draft: ReplyDraft| {
+        set_reply_drafts.update(|d| {
+            d.insert(comment_id, new_draft);
+        });
+    });
+    
+    // 💬 listener: toggle expanded_replay between None <--> Some(comment_id)
+    use leptos::logging::log;    
     let on_reply_click = move |_| {
         if expanded_reply.get() == Some(comment_id) {
+            set_show_main_form.set(true);
             set_expanded_reply.set(None);
         } else {
+            set_show_main_form.set(false);
             set_expanded_reply.set(Some(comment_id));
         }
     };
@@ -392,22 +468,21 @@ fn comment_thread(
         </div>
         <p class="mt-1 text-gray-700">{comment_content.clone()}</p>
 
-        {move || {
-          if is_expanded() {
+        { 
             view! {
               <InlineReplyForm
                 page_id=page_id.clone()
                 parent_id=comment_id
                 add_comment=add_comment.clone()
                 set_expanded=set_expanded_reply
+                set_show_main_form=set_show_main_form
+                is_expanded=is_expanded
+                draft=draft_signal
+                set_draft=set_draft                    
               />
             }
-              .into_any()
-          } else {
-            ().into_any()
-          }
-        }}
-
+           
+        }
         {children_views}
       </div>
     }
@@ -416,6 +491,8 @@ fn comment_thread(
 
 #[component]
 pub fn CommentSystem(page_id: String) -> impl IntoView {
+    use leptos::logging::log;
+    
     let page_id = if page_id.is_empty() {
         let location = leptos::web_sys::window().unwrap().location();
         location.pathname().unwrap()
@@ -423,67 +500,122 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
         page_id
     };
     let page_id_arc = Arc::new(page_id);
+    let page_id_for_children = Arc::clone(&page_id_arc);
+    let page_id_for_top_form = Arc::clone(&page_id_arc);
+    let page_id_for_resource = Arc::clone(&page_id_arc);
+    
+    let (show_main_form, set_show_main_form) = signal(true);
 
-    let (expanded_reply, set_expanded_reply) = signal(None::<i64>);
+    // if the reply bubble is first clicked: current reply's parent id, e.g, Some(comment_id)
+    // if the reply bubble is clicked again: None
+    let (expanded_reply, set_expanded_reply) = signal(None::<i64>); 
+
+    let (n_comments_submitted, set_n_comments_submitted) = signal(0 as usize);    
     let add_comment = ServerAction::<AddComment>::new();
-    let page_id_cloned = Arc::clone(&page_id_arc);
     let comments_resource = Resource::new(
-        move || (add_comment.version().get(), page_id_cloned.clone()),
+        move || (n_comments_submitted.get(), page_id_for_resource.clone()),
         move |(_, pid_arc)| get_comments((*pid_arc).clone()),
     );
 
-    Effect::new(move |_| {
-        let _ = add_comment.version().get();
-        set_expanded_reply.set(None);
-    });
 
-    let page_id_for_top_form = Arc::clone(&page_id_arc);
-    let page_id_for_children = Arc::clone(&page_id_arc);
+    let (user_name_main_form, set_user_name_main_form) = signal(String::new());
+    let (content_main_form, set_content_main_form) = signal(String::new());
+    // submitted_result_message is drived by inline AND main form, since submitted_result_message <- add_comment_submitted <- add_comment(action)
+    // where action is resued by inline and main form
+    let (submitted_result_message, set_submitted_result_message) = signal(String::new());
+
+    let (reply_drafts, set_reply_drafts) = signal(HashMap::<i64, ReplyDraft>::new());
+    
+    
+                
+    Effect::new(move |_| {
+        let result = add_comment.value().get();
+        match result {
+            Some(Ok(resp)) => {
+                *set_n_comments_submitted.write() +=1;
+                // log!("add_comment submitted: ok");
+                // log!("  form_id={}", resp.form_id);
+                match resp.form_id.as_str() {
+                    "main" => {
+                        set_submitted_result_message.set("已提交，审核中".to_string());
+                        set_user_name_main_form.set(String::new());
+                        set_content_main_form.set(String::new());
+                    }
+                    "inline" => {
+                        set_submitted_result_message.set("已提交，审核中".to_string());
+                        set_expanded_reply.set(None);
+                        set_show_main_form.set(true);
+                        if let Some(parent_id) = resp.parent_id {
+                            set_reply_drafts.update(|d| {
+                                d.remove(&parent_id);
+                            });
+                        }                        
+                    }
+                    _ => {}
+                }
+            }
+            Some(Err(_)) => {
+                // log!("add_comment submitted: failed");
+                set_submitted_result_message.set("提交失败，请稍后重试".to_string());
+            }
+            None => {
+                // log!("add_comment submitted: None");
+                set_submitted_result_message.set("".to_string()); 
+            }
+        }
+    });
 
     view! {
       <div class="comment-container mt-4">
-        <ActionForm action=add_comment>
-          <input type="hidden" name="page_id" value=page_id_for_top_form.to_string() />
-          <div class="relative shrink w-full m-2 rounded-xl border border-solid border-gray-300 mb-5">
-            <div class="flex rounded-t-xl overflow-hidden px-1 border-b-2 border-dashed border-b-gray-300">
-              <div class="flex flex-1">
-                <label class="min-w-10 text-[#444] text-xs text-center py-3 px-2">昵称</label>
-                <input
-                  class="resize-none w-0 text-[0.625em] flex-1 p-2 bg-transparent"
-                  type="text"
-                  name="user_name"
-                  required
-                />
+        <div class="text-sm mb-2 text-center">{submitted_result_message}</div>
+            
+        <div style:display=move || if show_main_form.get() { "block" } else { "none" }>
+            <ActionForm action=add_comment>
+            <input type="hidden" name="form_id" value="main" />
+            <input type="hidden" name="page_id" value=page_id_for_top_form.to_string() />
+
+            <div class="relative shrink w-full m-2 rounded-xl border border-solid border-gray-300 mb-5">
+              <div class="flex rounded-t-xl overflow-hidden px-1 border-b-2 border-dashed border-b-gray-300">
+                <div class="flex flex-1">
+                  <label class="min-w-10 text-[#444] text-xs text-center py-3 px-2">昵称</label>
+                  <input
+                    class="resize-none w-0 text-[0.625em] flex-1 p-2 bg-transparent"
+                    type="text"
+                    name="user_name"
+                    bind:value=(user_name_main_form, set_user_name_main_form)
+                    required
+                  />
+                </div>
+              </div>
+
+              <textarea
+                class="relative resize-y box-border w-[calc(100%-1em)] min-h-32 text-xs my-3 mx-2 rounded-xs bg-transparent"
+                name="content"
+                bind:value=(content_main_form, set_content_main_form)
+                placeholder="欢迎评论"
+                required
+              ></textarea>
+
+              <div class="relative flex flex-wrap mx-2 my-3">
+                <div class="flex items-center justify-end flex-3 flex-shrink">
+                  <button
+                    type="submit"
+                    class="inline-block px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 cursor-pointer"
+                  >
+                    {move || {
+                      if add_comment.pending().get() { "发送中..." } else { "提交" }
+                    }}
+                  </button>
+                </div>
               </div>
             </div>
-
-            <textarea
-              class="relative resize-y box-border w-[calc(100%-1em)] min-h-32 text-xs my-3 mx-2 rounded-xs bg-transparent"
-              name="content"
-              placeholder="欢迎评论"
-              required
-            ></textarea>
-
-            <div class="relative flex flex-wrap mx-2 my-3">
-              <div class="flex items-center justify-end flex-3 flex-shrink">
-                <button
-                  type="submit"
-                  class="inline-block px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 cursor-pointer"
-                >
-                  {move || { if add_comment.pending().get() { "发送中..." } else { "提交" } }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </ActionForm>
+          </ActionForm>
+        </div>
 
         <div>
           <div class="text-xl">"评论"</div>
         </div>
-        <Suspense fallback=|| {
-          view! { <p>"加载中..."</p> }
-        }>
-          {move || {
+        <Suspense fallback=|| { view! { <p>"加载中..."</p> } }> {move || {
             comments_resource
               .get()
               .map(|res| match res {
@@ -506,6 +638,9 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
                         set_expanded_reply,
                         add_comment.clone(),
                         Arc::clone(&page_id_for_children),
+                          set_show_main_form,
+                          reply_drafts,
+                          set_reply_drafts,
                       )
                     })
                     .collect();
@@ -531,6 +666,8 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
     }
 }
 
+
+/// Show review result
 #[component]
 fn ReviewResult() -> impl IntoView {
     use leptos_router::hooks::use_query_map;
@@ -543,14 +680,14 @@ fn ReviewResult() -> impl IntoView {
           "approved" => view! { <h1 class="text-green-600">"✅ 审核成功：已经通过"</h1> },
           "rejected" => view! { <h1 class="text-red-600">"✅ 审核成功：已经拒绝"</h1> },
           "expired" => view! { <h1 class="text-yellow-600">"❌：⏰ 链接已过期"</h1> },
-          "invalid" => view! { <h1 class="text-yellow-600">"❌：⏰ 链接无效"</h1> },
+          "invalid" => view! { <h1 class="text-yellow-600">"❌：🚫 链接无效"</h1> },
           _ => view! { <h1 class="a">"❌ ℹ️ 未知状态"</h1> },
         }}
       </div>
     }
 }
 
-// provide review-result page
+/// A simple App which provides review-result route.
 #[component]
 pub fn App() -> impl IntoView {
     use leptos_router::path;

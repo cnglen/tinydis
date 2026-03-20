@@ -1,28 +1,12 @@
-* tinydis
+A *tiny* and *anonymous discussion* plugin implemented using Rust.
 
-A tiny and anonymous discussion plugin implented by Rust.
+* usage 
 
-** dev
+** build
 
-#+begin_src bash
-  cargo install cargo-leptos --locked
-  cargo leptos watch
-  cargo leptos build
-#+end_src
-
-** usage 
-
-
-#+begin_src bash
-  export TINYDIS_SMTP_USERNAME=your_email_to_send_review_message
-  export TINYDIS_SMTP_PASSWORD=your_password_to_send_review_message   # an App password is prefered to regular parssword
-  export TINYDIS_SMTP_HOST=your_smtp_host
-  export TINYDIS_SMTP_PORT=your_smtp_port
-  export TINYDIS_ADMIN_EMAIL=admin_email_to_receive_review_message
-  export TINYDIS_ALLOWED_ORIGINS="*" # ALLOWED ORIGIN for backend server, such as "http://127.0.0.1:8080,http://127.0.0.1:9999"
-  export LEPTOS_SITE_ADDR="127.0.0.1:3000" # backend site ip:port
-  export TINYDIS_SERVER_ADDR="http://${LEPTOS_SITE_ADDR}" # use https or http
-#+end_src
+the output:
+- frontend files: tinydis.js/tinydis.css/tindydis_bg.wasm
+- backend binary executable file: tinydis
 
 #+begin_src bash
   cargo install --locked cargo-leptos
@@ -30,23 +14,45 @@ A tiny and anonymous discussion plugin implented by Rust.
   cp -r ./target/site/assets YOUR_SITE_ROOT_PATH
 #+end_src
 
-html head:
+** start backend server
 
-#+begin_src html
-  <link rel="stylesheet" href="/assets/tinydis.css" />
+- read/write comments to the sqlite db
+- send comments and clickable reject/approve links to admin email for review
+
+#+begin_src bash
+  export TINYDIS_SMTP_USERNAME=your_email_to_send_review_message
+  export TINYDIS_SMTP_PASSWORD=your_password_to_send_review_message   # an App password is prefered to regular parssword
+  export TINYDIS_SMTP_HOST=your_smtp_host
+  export TINYDIS_SMTP_PORT=your_smtp_port
+  export TINYDIS_ADMIN_EMAIL=admin_email_to_receive_review_message
+  export TINYDIS_ALLOWED_ORIGINS="*" # ALLOWED ORIGIN for backend server, such as "http://127.0.0.1:8080,http://127.0.0.1:9999" or "*" for test
+  export LEPTOS_SITE_ADDR="your_backend_ip_port" # backend site ip:port, such as "127.0.0.1:3000"
+  export TINYDIS_SERVER_ADDR="http://${LEPTOS_SITE_ADDR}" # use https or http
+  ./PATH_OF_tinydis
 #+end_src
 
-html body:
+** import tinydis in frontend
+
+Html import
 
 #+begin_src html
-  <div id="tinydis" data-server-url="TINYDIS_SERVER_ADDR"></div>
-  <script type="module">
-    import init from '/assets/tinydis.js';
-    init();
-  </script>
+  <head>
+    <!-- ... -->
+    <link rel="stylesheet" href="/assets/tinydis.css" />
+    <!-- ... -->
+  </head>    
+
+  <body>
+    <!-- ... -->
+    <div id="tinydis" data-server-url="TINYDIS_SERVER_ADDR"></div>
+    <script type="module">
+      import init from '/assets/tinydis.js';
+      init();
+    </script>
+  </body>
 #+end_src
 
-Or you can explictly set data-page-id
+Or you can explictly set data-page-id (note: if data-page-id is not provided, the url of current page is used as data-page-id)
 #+begin_src html
   <div id="tinydis" data-page-id="YOUR_PAGE_ID" data-server-url="TINYDIS_SERVER_ADDR"></div>
   <script type="module">
@@ -56,3 +62,7 @@ Or you can explictly set data-page-id
 #+end_src
 
 
+
+* reference
+
+- [[https://github.com/leptos-rs/leptos][leptos]]
