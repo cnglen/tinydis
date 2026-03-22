@@ -26,14 +26,19 @@ lettre = { version = "0.11.19", default-features = false, features = [
 ], optional=true }
 http = "1.4.0"
 thiserror = "2.0.18"
+leptos_i18n = { version = "0.6.1", features = ["csr"] }
+rust-i18n = {version="3.1.5"}
+
+[build-dependencies]
+leptos_i18n_build = {version="0.6.1", features=["csr"]}
 
 [features]
 default = ["csr"]
 csr = [
-"leptos/csr",
-"leptos_router",
-"dep:console_error_panic_hook",
-"dep:wasm-bindgen",
+    "leptos/csr",
+    "leptos_router",
+    "dep:console_error_panic_hook",
+    "dep:wasm-bindgen",
 ]
 ssr = [
     "dep:uuid",

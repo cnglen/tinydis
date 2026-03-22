@@ -1,3 +1,4 @@
+rust_i18n::i18n!();
 pub mod app;
 
 #[cfg(feature = "csr")]
@@ -6,7 +7,7 @@ pub fn start() {
     use crate::app::CommentSystem;
     use leptos::prelude::*;
     use wasm_bindgen::JsCast;
-    
+
     console_error_panic_hook::set_once();
 
     if let Some(el) = document().get_element_by_id("tinydis") {

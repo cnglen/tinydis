@@ -1,3 +1,5 @@
+rust_i18n::i18n!();
+
 pub mod app;
 
 fn strip_protocol(url: &str) -> &str {
@@ -6,25 +8,38 @@ fn strip_protocol(url: &str) -> &str {
         .unwrap_or(url)
 }
 
-
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() {
     use axum::Router;
+    use http::header::CONTENT_TYPE;
+    use http::Method;
     use leptos::logging::log;
     use leptos::prelude::*;
     use leptos_axum::{handle_server_fns_with_context, LeptosRoutes};
     use sqlx::SqlitePool;
-    use tower_http::cors::{CorsLayer, AllowOrigin};
     use std::env;
-    use http::Method;
-    use http::header::{CONTENT_TYPE};
+    use tower_http::cors::{AllowOrigin, CorsLayer};
+
+    // check config of env
+    env::var("TINYDIS_SMTP_HOST").expect("TINYDIS_SMTP_HOST must be set");
+    env::var("TINYDIS_SMTP_PORT").expect("TINYDIS_SMTP_PORT must be set");
+    env::var("TINYDIS_SMTP_USERNAME").expect("TINYDIS_SMTP_USERNAME must be set");
+    env::var("TINYDIS_SMTP_PASSWORD").expect("TINYDIS_SMTP_PASSWORD must be set");
+    env::var("TINYDIS_ADMIN_EMAIL").expect("TINYDIS_ADMIN_EMAIL must be set");
+    env::var("TINYDIS_SERVER_ADDR")
+        .expect("TINYDIS_SERVER_ADDR must be set such as http://your_domain_or_ip:your_port");
+    env::var("TINYDIS_ALLOWED_ORIGINS").expect("TINYDIS_ALLOWED_ORIGINS must be set");
+
+    let locale = env::var("TINYDIS_ADMIN_LOCALE").unwrap_or(String::from("en"));
+    log!("Admin mail locale: {}", locale);
+    rust_i18n::set_locale(&locale);
 
     fn build_cors() -> CorsLayer {
-        let origins_str = env::var("TINYDIS_ALLOWED_ORIGINS")
-            .expect("TINYDIS_ALLOWED_ORIGINS must be set");
+        let origins_str =
+            env::var("TINYDIS_ALLOWED_ORIGINS").expect("TINYDIS_ALLOWED_ORIGINS must be set");
 
-        let origins = if origins_str=="*" {
+        let origins = if origins_str == "*" {
             AllowOrigin::any()
         } else {
             origins_str
@@ -33,15 +48,14 @@ async fn main() {
                 .collect::<Vec<_>>()
                 .into()
         };
-        println!("{:?}", origins);
-
+        log!("Allowed origins: {:?}", origins);
 
         CorsLayer::new()
             .allow_origin(origins)
             .allow_methods([Method::GET, Method::POST])
             .allow_headers([CONTENT_TYPE])
     }
-    
+
     let pool = SqlitePool::connect("sqlite:comments.db?mode=rwc")
         .await
         .unwrap();
@@ -57,7 +71,7 @@ CREATE TABLE IF NOT EXISTS comments (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (parent_id) REFERENCES comments(id) ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS idx_comments_url_status_created ON comments(page_id, status, parent_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_comments_pageid_status_parentid_createdat ON comments(page_id, status, parent_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS review_tokens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,7 +88,7 @@ COMMIT;")
     let addr_str = env::var("TINYDIS_SERVER_ADDR").expect("TINYDIS_SERVER_ADDR must be set");
     let addr_str = strip_protocol(&addr_str).to_string();
     let addr: std::net::SocketAddr = addr_str.parse().expect("Invalid socket address format");
-    conf.leptos_options.site_addr=addr;
+    conf.leptos_options.site_addr = addr;
 
     let addr = conf.leptos_options.site_addr;
     let leptos_options = conf.leptos_options;
@@ -92,7 +106,7 @@ COMMIT;")
     use leptos_axum::generate_route_list;
     use tinydis::app::App;
     let routes = generate_route_list(App); // "/review-result" in App()
-    // log!("routes by generate_route_list(App): {:#?}", routes);
+                                           // log!("routes by generate_route_list(App): {:#?}", routes);
 
     let app = Router::new()
         .route(
@@ -108,8 +122,7 @@ COMMIT;")
         )
         // .layer(CorsLayer::permissive()) // for debug
         .layer(build_cors())
-        .with_state(leptos_options)
-        ;
+        .with_state(leptos_options);
 
     log!("listening on http://{}", &addr);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();

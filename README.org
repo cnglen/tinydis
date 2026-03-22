@@ -1,5 +1,14 @@
 A *tiny* and *anonymous discussion* plugin implemented using Rust.
 
+#+Caption: screent shot of en
+[[file:doc/comment_en.png]]
+
+* features
+
+- tiny
+- anonymous
+- i18n: en/zh-CN supported
+
 * usage 
 
 ** build
@@ -25,15 +34,17 @@ the output:
   export TINYDIS_SMTP_HOST=your_smtp_host
   export TINYDIS_SMTP_PORT=your_smtp_port
   export TINYDIS_ADMIN_EMAIL=admin_email_to_receive_review_message
-  
+  export TINYDIS_ADMIN_LOCALE=en # en/zh-CN supported now, if not set, use en
   export TINYDIS_ALLOWED_ORIGINS="*" # ALLOWED ORIGIN for backend server, such as "http://127.0.0.1:8080,http://127.0.0.1:9999" or "*" for test
-  export TINYDIS_SERVER_ADDR="http://${IP:PORT}" # use https or http, such as http://127.0.0.1:3000
+
   ./PATH_OF_tinydis
 #+end_src
 
 ** import tinydis in frontend
 
 Html import
+
+TINYDIS_SERVER_ADDR ~ http:​//​your_domain_or_ip:3000
 
 #+begin_src html
   <head>
@@ -61,11 +72,16 @@ Or you can explictly set data-page-id (note: if data-page-id is not provided, th
   </script>
 #+end_src
 
+* developement
 
+i18n:
+- use leptos_i18n in Component, which get locale from browser
+- use rust_i18n get local from env, such as TINYDIS_ADMIN_LOCALE  
 
 * todo
 
-- i18n
+- deploy test in production env?
+  
 - better display
 
 * reference
