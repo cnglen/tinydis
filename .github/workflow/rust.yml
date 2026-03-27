@@ -1,0 +1,26 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Output rust version for educational purposes
+      run: rustup --version
+    - name: Build
+      run: |
+        cargo install --locked cargo-leptos
+        cargo leptos build --release
+        mv target/site/assets/tinydis.wasm  target/site/assets/tinydis_bg.wasm
+        rm -rf ./target/site/assets/*.ts
