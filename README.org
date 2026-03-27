@@ -11,23 +11,24 @@ A *tiny* and *anonymous discussion* plugin implemented using Rust.
 
 * usage 
 
-** build
+** Build
 
-the output:
-- frontend files: tinydis.js/tinydis.css/tindydis_bg.wasm
-- backend binary executable file: tinydis
+The build process produces the following outputs:
+- frontend files: ~tinydis.js~, ~tinydis.css~ and ~tindydis_bg.wasm~
+- backend excutable binary: ~tinydis~
 
 #+begin_src bash
+  git clone https://github.com/cnglen/tinydis.git
+  cd tinydis
   cargo install --locked cargo-leptos
-  cargo leptos build --release && mv target/site/assets/tinydis.wasm  target/site/assets/tinydis_bg.wasm
-  rm -rf ./target/site/assets/*.ts
+  cargo leptos build --release && mv target/site/assets/tinydis.wasm  target/site/assets/tinydis_bg.wasm && rm -rf ./target/site/assets/*.ts
   cp -r ./target/site/assets YOUR_SITE_ROOT_PATH
 #+end_src
 
-** start backend server
-
-- read/write comments to the sqlite db
-- send comments and clickable reject/approve links to admin email for review
+** Start backend server
+The backend server if responsible for:
+- Reading/writing comments to the sqlite db
+- Sending comments along with clickable reject/approve links to admin email for review
 
 #+begin_src bash
   export TINYDIS_SMTP_USERNAME=your_email_to_send_review_message
@@ -35,18 +36,18 @@ the output:
   export TINYDIS_SMTP_HOST=your_smtp_host
   export TINYDIS_SMTP_PORT=your_smtp_port
   export TINYDIS_ADMIN_EMAIL=admin_email_to_receive_review_message
-  export TINYDIS_ADMIN_LOCALE=en # en/zh-CN supported now, if not set, use en
-  export TINYDIS_ALLOWED_ORIGINS="*" # ALLOWED ORIGIN for backend server, such as "http://127.0.0.1:8080,http://127.0.0.1:9999" or "*" for test
+  export TINYDIS_ADMIN_LOCALE=en # Supported: en/zh-CN; default to en if not set
+  export TINYDIS_ALLOWED_ORIGINS="*" # Allowed origins for backend server, e.g., "http://127.0.0.1:8080,http://127.0.0.1:9999" or "*" for testing
 
   ./PATH_OF_tinydis
 #+end_src
 
-** import tinydis in frontend
+** Import tinydis in frontend
 
-Html import
-
-TINYDIS_SERVER_ADDR ~ http:​//​your_domain_or_ip:3000
-
+To embed tindis in you HTML, the following attributes can be customized:
+- ​=data-page-id=​: defaults to the current page URL
+- ​=data-server-url=​: defaults to the HTTP *Origin* header
+  
 #+begin_src html
   <head>
     <!-- ... -->
@@ -56,7 +57,9 @@ TINYDIS_SERVER_ADDR ~ http:​//​your_domain_or_ip:3000
 
   <body>
     <!-- ... -->
-    <div id="tinydis" data-server-url="TINYDIS_SERVER_ADDR"></div>
+    <div id="tinydis"></div>
+    <!-- Optionally, customize data-page-id(for each page) and data-server-url -->
+    <!-- <div id="tinydis" data-page-id="YOUR_PAGE_ID" data-server-url="TINYDIS_SERVER_ADDR"></div> -->
     <script type="module">
       import init from '/assets/tinydis.js';
       init();
@@ -64,27 +67,12 @@ TINYDIS_SERVER_ADDR ~ http:​//​your_domain_or_ip:3000
   </body>
 #+end_src
 
-Or you can explictly set data-page-id (note: if data-page-id is not provided, the url of current page is used as data-page-id)
-#+begin_src html
-  <div id="tinydis" data-page-id="YOUR_PAGE_ID" data-server-url="TINYDIS_SERVER_ADDR"></div>
-  <script type="module">
-    import init from '/assets/tinydis.js';
-    init();
-  </script>
-#+end_src
+* Developement
 
-* developement
+** Internationlization (i18n)
+- Frontend: use ​=leptos_i18n=​ in components, where locale is automatically detected from the browser
+- Backend: use =rust_i18n=, where locale is read from environment variable, =TINYDIS_ADMIN_LOCALE=
 
-i18n:
-- use leptos_i18n in Component, which get locale from browser
-- use rust_i18n get local from env, such as TINYDIS_ADMIN_LOCALE  
+* Reference
 
-* todo
-
-- deploy test in production env? https? port map?
-- wasm.gz? 
-- better display
-
-* reference
-
-- [[https://github.com/leptos-rs/leptos][leptos]]
+- [[https://github.com/leptos-rs/leptos][leptos]], a cutting-edge Rust web framework is ued
