@@ -19,6 +19,7 @@
 #+begin_src bash
   git clone https://github.com/cnglen/tinydis.git
   cd tinydis
+  rustup target add wasm32-unknown-unknown
   cargo install --locked cargo-leptos
   cargo leptos build --release && mv target/site/assets/tinydis.wasm  target/site/assets/tinydis_bg.wasm && rm -rf ./target/site/assets/*.ts
   cp -r ./target/site/assets YOUR_SITE_ROOT_PATH

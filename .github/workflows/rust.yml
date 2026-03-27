@@ -16,11 +16,25 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Output rust version for educational purposes
-      run: rustup --version
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+
+    - name: Verify rustup and WASM target
+      run: |
+        rustup --version
+        rustup target list --installed | grep wasm32-unknown-unknown
+
+    - name: Install cargo-leptos
+      run: cargo install --locked cargo-leptos
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      
     - name: Build
       run: |
-        cargo install --locked cargo-leptos
         cargo leptos build --release
         mv target/site/assets/tinydis.wasm  target/site/assets/tinydis_bg.wasm
         rm -rf ./target/site/assets/*.ts
