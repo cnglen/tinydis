@@ -1,15 +1,18 @@
-A *tiny* and *anonymous discussion* plugin implemented using Rust.
+A *tiny*, *anonymous* discussion plugin built with Rust.
+
+-----
+
 
 #+Caption: screent shot of en
 [[file:doc/comment_en.png]]
 
-* features
+* Features
 
 - tiny
 - anonymous
 - i18n: en/zh-CN supported
 
-* usage 
+* Usage 
 
 ** Build
 
