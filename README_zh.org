@@ -1,0 +1,85 @@
+一个​*小巧*​、​*匿名*​的Rust讨论插件
+
+-----
+
+* 功能特性
+
+- 小巧
+- 匿名
+- 国际化：支持 en / zh-CN
+
+* 使用说明
+
+** 构建
+
+构建过程会生成以下文件：
+- 前端文件：​~tinydis.js~​、​~tinydis.css~​和​~tinydis_bg.wasm~​
+- 后端可执行二进制文件：​~tinydis~​
+
+#+begin_src bash
+  git clone https://github.com/cnglen/tinydis.git
+  cd tinydis
+  cargo install --locked cargo-leptos
+  cargo leptos build --release && mv target/site/assets/tinydis.wasm  target/site/assets/tinydis_bg.wasm && rm -rf ./target/site/assets/*.ts
+  cp -r ./target/site/assets YOUR_SITE_ROOT_PATH
+#+end_src
+
+** 启动后端服务
+
+后端服务负责：
+- 对 SQLite 数据库进行评论的读写
+- 将评论及可点击的审核（通过/拒绝）链接发送至管理员邮箱进行审核
+
+#+begin_src bash
+  export TINYDIS_SMTP_USERNAME=your_email_to_send_review_message # 用于发送审核邮件的邮箱地址
+  export TINYDIS_SMTP_PASSWORD=your_password_to_send_review_message # 推荐使用应用专用密码而非普通密码
+  export TINYDIS_SMTP_HOST=your_smtp_host
+  export TINYDIS_SMTP_PORT=your_smtp_port
+  export TINYDIS_ADMIN_EMAIL=admin_email_to_receive_review_message
+  export TINYDIS_ADMIN_LOCALE=en # 支持 en / zh-CN，未设置时默认为 en
+  export TINYDIS_ALLOWED_ORIGINS="*" # 后端允许的源(CORS)，例如 "http://127.0.0.1:8080,http://127.0.0.1:9999"，测试时可设为 "*"
+
+  ./PATH_OF_tinydis
+#+end_src
+
+** 在前端中引入tinydis
+
+在HTML中嵌入tinydis时，可自定义以下属性：
+- ​=data-page-id=​：默认为当前页面的 URL
+- ​=data-server-url=​：默认为 HTTP *Origin* 请求头
+
+#+begin_src html
+  <head>
+    <!-- ... -->
+    <link rel="stylesheet" href="/assets/tinydis.css" />
+    <!-- ... -->
+  </head>    
+
+  <body>
+    <!-- ... -->
+    <div id="tinydis"></div>
+    <!-- 可选：自定义 data-page-id（每个页面不同）和 data-server-url -->
+    <!-- <div id="tinydis" data-page-id="YOUR_PAGE_ID" data-server-url="TINYDIS_SERVER_ADDR"></div> -->
+    <script type="module">
+      import init from '/assets/tinydis.js';
+      init();
+    </script>
+  </body>
+#+end_src
+
+** 截图
+
+#+Caption: screent shot of en
+[[file:doc/comment_en.png]]
+
+* 开发
+
+** 国际化（i18n）
+- 前端：在组件中使用​~leptos_i18n~​，语言环境会自动从浏览器中获取
+- 后端：使用​~rust_i18n~​，语言环境从环境变量​~TINYDIS_ADMIN_LOCALE~​读取
+
+** 参考资料
+
+- [[https://github.com/leptos-rs/leptos][leptos]]，一个前沿的 Rust Web 框架
+
+

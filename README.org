@@ -1,10 +1,8 @@
 A *tiny*, *anonymous* discussion plugin built with Rust.
 
+[[./README_zh.org][中文 README]]
+
 -----
-
-
-#+Caption: screent shot of en
-[[file:doc/comment_en.png]]
 
 * Features
 
@@ -29,6 +27,7 @@ The build process produces the following outputs:
 #+end_src
 
 ** Start backend server
+
 The backend server if responsible for:
 - Reading/writing comments to the sqlite db
 - Sending comments along with clickable reject/approve links to admin email for review
@@ -70,12 +69,17 @@ To embed tindis in you HTML, the following attributes can be customized:
   </body>
 #+end_src
 
+** Screenshot
+
+#+Caption: screent shot of en
+[[file:doc/comment_en.png]]
+
 * Developement
 
 ** Internationlization (i18n)
 - Frontend: use ​=leptos_i18n=​ in components, where locale is automatically detected from the browser
 - Backend: use =rust_i18n=, where locale is read from environment variable, =TINYDIS_ADMIN_LOCALE=
 
-* Reference
+** Reference
 
 - [[https://github.com/leptos-rs/leptos][leptos]], a cutting-edge Rust web framework is ued
