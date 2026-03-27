@@ -352,7 +352,7 @@ fn InlineReplyForm(
 
     view! {
       <div
-        class="mt-3 mb-2 border border-blue-200 rounded-lg p-3 bg-blue-50"
+        class="tnyds:mt-3 tnyds:mb-2 tnyds:border tnyds:border-blue-200 tnyds:rounded-lg tnyds:p-3 tnyds:bg-blue-50"
         style:display=move || if show_inline_reply_form.get() { "block" } else { "none" }
       >
         <ActionForm action=add_comment>
@@ -360,9 +360,9 @@ fn InlineReplyForm(
           <input type="hidden" name="page_id" value=page_id.to_string() />
           <input type="hidden" name="parent_id" value=parent_id.to_string() />
 
-          <div class="flex flex-col space-y-2">
+          <div class="tnyds:flex tnyds:flex-col tnyds:space-y-2">
             <textarea
-              class="w-full p-2 text-xs border border-gray-300 rounded outline-0"
+              class="tnyds:w-full tnyds:p-2 tnyds:text-xs tnyds:border tnyds:border-gray-300 tnyds:rounded tnyds:outline-0"
               name="content"
               placeholder=t_string!(i18n, write_your_reply)
               prop:value=content
@@ -370,10 +370,10 @@ fn InlineReplyForm(
               rows="3"
               required
             ></textarea>
-            <div class="relative flex flex-wrap my-1">
-              <div class="flex flex-1">
+            <div class="tnyds:relative tnyds:flex tnyds:flex-wrap tnyds:my-1">
+              <div class="tnyds:flex tnyds:flex-1">
                 <input
-                  class="flex p-2 text-xs border border-gray-300 rounded"
+                  class="tnyds:flex tnyds:p-2 tnyds:text-xs tnyds:border tnyds:border-gray-300 tnyds:rounded"
                   type="text"
                   name="user_name"
                   placeholder=t_string!(i18n, user_name)
@@ -382,10 +382,10 @@ fn InlineReplyForm(
                   required
                 />
               </div>
-              <div class="flex justify-end space-x-2">
+              <div class="tnyds:flex tnyds:justify-end tnyds:space-x-2">
                 <button
                   type="button"
-                  class="px-3 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer"
+                  class="tnyds:px-3 tnyds:py-1 tnyds:text-xs tnyds:text-gray-600 tnyds:border tnyds:border-gray-300 tnyds:rounded tnyds:hover:bg-gray-100 tnyds:cursor-pointer"
                   on:click=move |_| {
                     set_active_reply_parent_id.set(None);
                   }
@@ -394,7 +394,7 @@ fn InlineReplyForm(
                 </button>
                 <button
                   type="submit"
-                  class="px-3 py-1 text-xs text-white bg-blue-500 rounded hover:bg-blue-600 disabled:bg-blue-300 cursor-pointer"
+                  class="tnyds:px-3 tnyds:py-1 tnyds:text-xs tnyds:text-white tnyds:bg-blue-500 tnyds:rounded tnyds:hover:bg-blue-600 tnyds:disabled:bg-blue-300 tnyds:cursor-pointer"
                   disabled=move || add_comment.pending().get()
                 >
                   {move || {
@@ -477,15 +477,15 @@ fn comment_thread(
     };
 
     view! {
-      <div class="ml-4 mt-2 border-l-2 border-gray-200 pl-4">
-        <div class="flex items-start">
-          <div class="flex-1">
-            <strong class="mr-2">{comment_user_name.clone()}</strong>
-            <span class="text-gray-400 text-sm">{comment_date.clone()}</span>
+      <div class="tnyds:ml-4 tnyds:mt-2 tnyds:border-l-2 tnyds:border-gray-200 tnyds:pl-4">
+        <div class="tnyds:flex tnyds:items-start">
+          <div class="tnyds:flex-1">
+            <strong class="tnyds:mr-2">{comment_user_name.clone()}</strong>
+            <span class="tnyds:text-gray-400 tnyds:text-sm">{comment_date.clone()}</span>
           </div>
           <button
             type="button"
-            class="text-blue-500 hover:text-blue-700 cursor-pointer"
+            class="tnyds:text-blue-500 tnyds:hover:text-blue-700 tnyds:cursor-pointer"
             title=move || {
               if active_reply_parent_id.get() == Some(comment_id) {
                 t!(i18n, cancel_reply).to_html()
@@ -498,7 +498,7 @@ fn comment_thread(
             "💬"
           </button>
         </div>
-        <p class="mt-1 text-gray-700">{comment_content.clone()}</p>
+        <p class="tnyds:mt-1 tnyds:text-gray-700">{comment_content.clone()}</p>
 
         {
           view! {
@@ -603,8 +603,8 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
 
     view! {
       <I18nContextProvider>
-        <div class="comment-container mt-4">
-          <div class="text-sm mb-2 text-center">{submitted_result_message}</div>
+        <div class="tnyds:comment-container tnyds:mt-4">
+          <div class="tnyds:text-sm tnyds:mb-2 tnyds:text-center">{submitted_result_message}</div>
 
           // show main-form if no active reply form (active_reply_parent_id is None)
           <div style:display=move || {
@@ -614,19 +614,19 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
               <input type="hidden" name="form_id" value="main" />
               <input type="hidden" name="page_id" value=page_id_for_top_form.to_string() />
 
-              <div class="relative shrink w-full m-2 rounded-xl border border-solid border-gray-300 mb-5">
+              <div class="tnyds:relative tnyds:shrink tnyds:w-full tnyds:m-2 tnyds:rounded-xl tnyds:border tnyds:border-solid tnyds:border-gray-300 tnyds:mb-5">
                 <textarea
-                  class="relative resize-y box-border w-[calc(100%-1em)] min-h-32 text-xs my-3 mx-2 rounded-xs bg-transparent outline-0"
+                  class="tnyds:relative tnyds:resize-y tnyds:box-border tnyds:w-[calc(100%-1em)] tnyds:min-h-32 tnyds:text-xs tnyds:my-3 tnyds:mx-2 tnyds:rounded-xs tnyds:bg-transparent tnyds:outline-0"
                   name="content"
                   bind:value=(content_main_form, set_content_main_form)
                   placeholder=t_string!(i18n, welcome_comment)
                   required
                 ></textarea>
 
-                <div class="relative flex flex-wrap mx-2 my-3">
-                  <div class="flex flex-1">
+                <div class="tnyds:relative tnyds:flex tnyds:flex-wrap tnyds:mx-2 tnyds:my-3">
+                  <div class="tnyds:flex tnyds:flex-1">
                     <input
-                      class="resize-none w-0 text-[0.625em] flex-1 p-2 bg-transparent outline-gray-300"
+                      class="tnyds:resize-none tnyds:w-0 tnyds:text-[0.625em] tnyds:flex-1 tnyds:p-2 tnyds:bg-transparent tnyds:outline-gray-300"
                       type="text"
                       name="user_name"
                       bind:value=(user_name_main_form, set_user_name_main_form)
@@ -635,10 +635,10 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
                     />
                   </div>
 
-                  <div class="flex items-center justify-end flex-3 flex-shrink">
+                  <div class="tnyds:flex tnyds:items-center tnyds:justify-end tnyds:flex-3 tnyds:flex-shrink">
                     <button
                       type="submit"
-                      class="inline-block px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 cursor-pointer"
+                      class="tnyds:inline-block tnyds:px-4 tnyds:py-2 tnyds:bg-blue-500 tnyds:text-white tnyds:rounded tnyds:hover:bg-blue-600 tnyds:cursor-pointer"
                     >
                       {move || {
                         if add_comment.pending().get() {
@@ -655,7 +655,7 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
           </div>
 
           <div>
-            <div class="text-xl">{t!(i18n, comments)}</div>
+            <div class="tnyds:text-xl">{t!(i18n, comments)}</div>
           </div>
           <Suspense fallback=|| {
             let i18n = use_i18n();
@@ -691,7 +691,7 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
                       .collect();
                     if root_views.is_empty() {
                       view! {
-                        <p class="text-gray-400 text-center">{t!(i18n, no_comment_be_first)}</p>
+                        <p class="tnyds:text-gray-400 tnyds:text-center">{t!(i18n, no_comment_be_first)}</p>
                       }
                         .into_any()
                     } else {
@@ -700,7 +700,7 @@ pub fn CommentSystem(page_id: String) -> impl IntoView {
                   }
                   _ => {
                     view! {
-                      <p class="text-gray-400 text-center">{t!(i18n, no_comment_be_first)}</p>
+                      <p class="tnyds:text-gray-400 tnyds:text-center">{t!(i18n, no_comment_be_first)}</p>
                     }
                       .into_any()
                   }
@@ -720,34 +720,34 @@ fn ReviewResult() -> impl IntoView {
     let result = move || query.get().get("result").unwrap_or_default();
 
     view! {
-      <div class="p-4">
+      <div style="padding: 2em;">
         {move || match result().as_str() {
           "approved" => {
             view! {
-              <h1 class="text-green-600">{format!("✅ {}", rust_i18n::t!("approved_info"))}</h1>
+              <h1 style="color:green;">{format!("✅ {}", rust_i18n::t!("approved_info"))}</h1>
             }
           }
           "rejected" => {
             view! {
-              <h1 class="text-red-600">{format!("✅ {}", rust_i18n::t!("rejected_info"))}</h1>
+              <h1 style="color:red;">{format!("✅ {}", rust_i18n::t!("rejected_info"))}</h1>
             }
           }
           "expired" => {
             view! {
-              <h1 class="text-yellow-600">
+              <h1 style="color:yellow;">
                 {format!("❌：⏰ {}", rust_i18n::t!("expired_info"))}
               </h1>
             }
           }
           "invalid" => {
             view! {
-              <h1 class="text-yellow-600">
+              <h1 style="color:lightgray">
                 {format!("❌：🚫 {}", rust_i18n::t!("invalid_info"))}
               </h1>
             }
           }
           _ => {
-            view! { <h1 class="a">{format!("❌ ℹ️ {}", rust_i18n::t!("unknown_info"))}</h1> }
+            view! { <h1 style="color:gray;">{format!("❌ ℹ️ {}", rust_i18n::t!("unknown_info"))}</h1> }
           }
         }}
       </div>

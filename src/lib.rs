@@ -17,9 +17,12 @@ pub fn start() {
 
         let server_url = el
             .get_attribute("data-server-url")
-            .expect("No data-server-url set!");
-        let static_url: &'static str = Box::leak(server_url.into_boxed_str());
-        leptos::prelude::server_fn::client::set_server_url(static_url);
+            .unwrap_or_else(|| "".into());
+
+        if !server_url.is_empty() {
+            let static_url: &'static str = Box::leak(server_url.into_boxed_str());
+            leptos::prelude::server_fn::client::set_server_url(static_url);
+        }
 
         let html_el = el.unchecked_into();
         let handle =

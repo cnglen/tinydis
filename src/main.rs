@@ -27,8 +27,6 @@ async fn main() {
     env::var("TINYDIS_SMTP_USERNAME").expect("TINYDIS_SMTP_USERNAME must be set");
     env::var("TINYDIS_SMTP_PASSWORD").expect("TINYDIS_SMTP_PASSWORD must be set");
     env::var("TINYDIS_ADMIN_EMAIL").expect("TINYDIS_ADMIN_EMAIL must be set");
-    env::var("TINYDIS_SERVER_ADDR")
-        .expect("TINYDIS_SERVER_ADDR must be set such as http://your_domain_or_ip:your_port");
     env::var("TINYDIS_ALLOWED_ORIGINS").expect("TINYDIS_ALLOWED_ORIGINS must be set");
 
     let locale = env::var("TINYDIS_ADMIN_LOCALE").unwrap_or(String::from("en"));
@@ -85,7 +83,7 @@ COMMIT;")
         .execute(&pool).await.unwrap();
 
     let mut conf = get_configuration(None).unwrap();
-    let addr_str = env::var("TINYDIS_SERVER_ADDR").expect("TINYDIS_SERVER_ADDR must be set");
+    let addr_str = env::var("TINYDIS_SERVER_ADDR").unwrap_or("http://127.0.0.1:3000".to_string());
     let addr_str = strip_protocol(&addr_str).to_string();
     let addr: std::net::SocketAddr = addr_str.parse().expect("Invalid socket address format");
     conf.leptos_options.site_addr = addr;

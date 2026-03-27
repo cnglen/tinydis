@@ -20,6 +20,7 @@ the output:
 #+begin_src bash
   cargo install --locked cargo-leptos
   cargo leptos build --release && mv target/site/assets/tinydis.wasm  target/site/assets/tinydis_bg.wasm
+  rm -rf ./target/site/assets/*.ts
   cp -r ./target/site/assets YOUR_SITE_ROOT_PATH
 #+end_src
 
@@ -80,8 +81,8 @@ i18n:
 
 * todo
 
-- deploy test in production env?
-  
+- deploy test in production env? https? port map?
+- wasm.gz? 
 - better display
 
 * reference

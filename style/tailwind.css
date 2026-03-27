@@ -1,1 +1,6 @@
-@import "tailwindcss";
+/* @import "tailwindcss" prefix(tnyds); */
+
+/* @import "tailwindcss";    -> disable Preflight from */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme) prefix(tnyds);
+@import "tailwindcss/utilities.css" layer(utilities) prefix(tnyds);
