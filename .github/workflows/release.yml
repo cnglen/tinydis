@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Verify rustup and WASM target
+        run: |
+          rustup --version
+          rustup target list --installed | grep wasm32-unknown-unknown
+      - name: Install cargo-leptos
+        run: cargo install --locked cargo-leptos
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Build CSS & Frontend
+        run: |
+          cargo leptos build --release
+          mv target/site/assets/tinydis.wasm  target/site/assets/tinydis_bg.wasm
+          rm -rf ./target/site/assets/*.ts
+      - name: Upload Frontend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: target/site/assets/
+
+  build-backend:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Backend
+        run:
+          cargo build --package=tinydis --bin=tinydis --no-default-features --features=ssr --release --target ${{ matrix.matrix.target }}
+      - name: Upload Backend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/tinydis
+
+  publish:
+    needs: [build-frontend, build-backend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            backend-*/*
+            frontend-dist.zip
