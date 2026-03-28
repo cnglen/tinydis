@@ -33,11 +33,12 @@ jobs:
           cargo leptos build --release
           mv target/site/assets/tinydis.wasm  target/site/assets/tinydis_bg.wasm
           rm -rf ./target/site/assets/*.ts
+          tar cvfz assets.tar.gz -C target/site/ assets/
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
-          path: target/site/assets/
+          path: assets.tar.gz
 
   build-backend:
     strategy:
@@ -59,7 +60,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/{{ matrix.bin }}
+          path: target/${{ matrix.target }}/release/${{ matrix.bin }}
 
   publish:
     needs: [build-frontend, build-backend]
@@ -77,8 +78,8 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true # 自动生成更新日志
-          overwrite: true
           fail_on_unmatched_files: false
           files: |
             backend-*/*
-            frontend-dist.zip
+            assets.tar.gz
+
