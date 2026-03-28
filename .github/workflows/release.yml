@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:  # 👈 添加这一行，允许手动触发
+    inputs:
+      release_version:
+        description: '手动发布的版本号 (例如 v1.0.0)'
+        required: true
+        default: 'v0.1.0'
 
 jobs:
   build-frontend:
