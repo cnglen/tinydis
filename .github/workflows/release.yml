@@ -33,14 +33,14 @@ jobs:
           cargo leptos build --release
           mv target/site/assets/tinydis.wasm  target/site/assets/tinydis_bg.wasm
           rm -rf ./target/site/assets/*.ts
-          tar cvfz assets.tar.gz -C target/site/ assets/
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-dist
-          path: assets.tar.gz
+          name: frontend-assets
+          path: target/site/assets
 
   build-backend:
+    needs: [build-frontend]
     strategy:
       matrix:
         include:
@@ -53,23 +53,46 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Download Frontend Assets
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-assets
+          path: temp_assets
       - name: Build Backend
         run:
           cargo build --package=tinydis --bin=tinydis --no-default-features --features=ssr --release --target ${{ matrix.target }}
-      - name: Upload Backend Artifact
+      - name: Prepare Package
+        shell: bash
+        run: |
+          mkdir -p staging/assets
+          cp target/${{ matrix.target }}/release/${{ matrix.bin }} staging/
+          cp -r temp_assets/assets/* staging/assets/
+
+      - name: Archive Release (Linux)
+        if: runner.os == 'Linux'
+        run: tar -czf tinydis-${{ matrix.target }}.tar.gz -C staging .
+      - name: Archive Release (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path staging/* -DestinationPath tinydis-${{ matrix.target }}.zip
+
+      - name: Upload Final Bundle
         uses: actions/upload-artifact@v4
         with:
-          name: backend-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/${{ matrix.bin }}
+          name: release-${{ matrix.target }}
+          path: tinydis-${{ matrix.target }}.*
 
   publish:
-    needs: [build-frontend, build-backend]
+    needs: [build-backend]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -78,8 +101,7 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true # 自动生成更新日志
-          fail_on_unmatched_files: false
           files: |
-            backend-*/*
-            assets.tar.gz
+            tinydis-*.tar.gz
+            tinydis-*.zip
 
