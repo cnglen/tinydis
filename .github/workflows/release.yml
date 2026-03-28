@@ -66,7 +66,8 @@ jobs:
         run: |
           mkdir -p staging/assets
           cp target/${{ matrix.target }}/release/${{ matrix.bin }} staging/
-          cp -r temp_assets/assets/* staging/assets/
+          ls -R temp_assets
+          cp -r temp_assets/* staging/assets/
 
       - name: Archive Release (Linux)
         if: runner.os == 'Linux'
@@ -104,4 +105,5 @@ jobs:
           files: |
             tinydis-*.tar.gz
             tinydis-*.zip
+
 
