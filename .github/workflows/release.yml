@@ -27,7 +27,7 @@ jobs:
       - name: Install cargo-leptos
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-leptos@v0.3.5
+          tool: cargo-leptos@0.3.5
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
       - name: Build CSS & Frontend
