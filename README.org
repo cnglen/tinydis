@@ -16,7 +16,7 @@ A *tiny*, *anonymous* discussion plugin built with Rust.
 
 The build process produces the following outputs:
 - frontend files: ~tinydis.js~, ~tinydis.css~ and ~tindydis_bg.wasm~
-- backend excutable binary: ~tinydis~
+- backend executable binary: ~tinydis~
 
 #+begin_src bash
   git clone https://github.com/cnglen/tinydis.git
@@ -29,9 +29,9 @@ The build process produces the following outputs:
 
 ** Start backend server
 
-The backend server if responsible for:
-- Reading/writing comments to the sqlite db
-- Sending comments along with clickable reject/approve links to admin email for review
+The backend server is responsible for:
+- Reading/writing comments to the SQlite DB
+- Sending comments along with clickable reject/approve links to the admin email for review
 
 #+begin_src bash
   export TINYDIS_SMTP_USERNAME=your_email_to_send_review_message
@@ -47,7 +47,7 @@ The backend server if responsible for:
 
 ** Import tinydis in frontend
 
-To embed tindis in you HTML, the following attributes can be customized:
+To embed tindis in your HTML, the following attributes can be customized:
 - ​=data-page-id=​: defaults to the current page URL
 - ​=data-server-url=​: defaults to the HTTP *Origin* header
   
@@ -83,4 +83,4 @@ To embed tindis in you HTML, the following attributes can be customized:
 
 ** Reference
 
-- [[https://github.com/leptos-rs/leptos][leptos]], a cutting-edge Rust web framework is ued
+- [[https://github.com/leptos-rs/leptos][leptos]], a cutting-edge Rust web framework is used
